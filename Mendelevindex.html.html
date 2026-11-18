@@ -1,0 +1,2389 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solitario Periódico — Aprendizaje Ludificado de la Tabla Periódica</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --card-w: 124px;
+      --card-h: 168px;
+    }
+    @media (max-width: 1024px) {
+      :root {
+        --card-w: 104px;
+        --card-h: 146px;
+      }
+    }
+    @media (max-width: 640px) {
+      :root {
+        --card-w: 84px;
+        --card-h: 124px;
+      }
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 50% 0%, #0f172a 0%, #020617 100%);
+      color: #f8fafc;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow-x: hidden;
+    }
+
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Card dimensions & styling */
+    .chem-card {
+      width: var(--card-w);
+      height: var(--card-h);
+      border-radius: 0.75rem;
+      position: relative;
+      transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.16s ease, border-color 0.16s ease;
+      box-shadow: 0 6px 16px -3px rgba(0, 0, 0, 0.65), 0 2px 6px -1px rgba(0, 0, 0, 0.4);
+      cursor: grab;
+      background: #1e293b;
+    }
+
+    .chem-card:active {
+      cursor: grabbing;
+    }
+
+    .chem-card.face-up:hover {
+      transform: translateY(-4px);
+      z-index: 40;
+      box-shadow: 0 14px 26px -4px rgba(0, 0, 0, 0.8), 0 0 14px rgba(56, 189, 248, 0.35);
+    }
+
+    .chem-card.selected-card {
+      outline: 3px solid #38bdf8;
+      box-shadow: 0 0 22px rgba(56, 189, 248, 0.75) !important;
+      transform: translateY(-5px) scale(1.02);
+      z-index: 45 !important;
+    }
+
+    .chem-card.hint-origin {
+      outline: 3px solid #fbbf24;
+      box-shadow: 0 0 26px rgba(251, 191, 36, 0.9) !important;
+      animation: pulseHint 1.2s infinite ease-in-out;
+      z-index: 50 !important;
+    }
+
+    .hint-target {
+      outline: 3px dashed #34d399 !important;
+      box-shadow: 0 0 25px rgba(52, 211, 153, 0.85) !important;
+      animation: pulseTarget 1.2s infinite ease-in-out;
+    }
+
+    @keyframes pulseHint {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-6px) scale(1.03); }
+    }
+
+    @keyframes pulseTarget {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.3); }
+    }
+
+    /* Face-down card pattern */
+    .chem-card.face-down {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 1.5px solid #334155;
+      cursor: default;
+      background-image: 
+        radial-gradient(rgba(56, 189, 248, 0.14) 1px, transparent 1px),
+        radial-gradient(rgba(168, 85, 247, 0.12) 1px, #0f172a 1px);
+      background-size: 16px 16px;
+      background-position: 0 0, 8px 8px;
+    }
+
+    /* Empty Slot / Pile Placeholder */
+    .card-slot {
+      width: var(--card-w);
+      height: var(--card-h);
+      border-radius: 0.75rem;
+      border: 2px dashed rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.45);
+      transition: all 0.15s ease;
+    }
+
+    .card-slot.drag-over {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
+    }
+
+    /* Compact Foundation Slot for 10 or 18-20 Foundations */
+    .foundation-slot-compact {
+      min-width: 102px;
+      height: 138px;
+      border-radius: 0.7rem;
+    }
+
+    /* Periodic table grid (18 columns) */
+    .pt-grid {
+      display: grid;
+      grid-template-columns: repeat(18, minmax(42px, 1fr));
+      gap: 4px;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090d16;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- TOP NAVIGATION & GAME CONTROLS -->
+  <header class="sticky top-0 z-50 backdrop-blur-md bg-slate-950/90 border-b border-slate-800 px-3 py-2.5 shadow-lg">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-2">
+      
+      <!-- Brand Title -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700 flex flex-col items-center justify-center shadow-md border border-cyan-300/30">
+          <span class="text-[9px] font-mono-code leading-none text-cyan-100 font-bold">118</span>
+          <span class="text-sm font-extrabold tracking-tight text-white leading-tight">Og</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-extrabold tracking-tight bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300 bg-clip-text text-transparent">
+              Solitario Periódico
+            </h1>
+            <span id="deckBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-700/50">
+              118 Elementos
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">
+            Aprendizaje ludificado de estructura atómica, bloques orbitales y familias químicas
+          </p>
+        </div>
+      </div>
+
+      <!-- Center Stats Pill -->
+      <div class="flex items-center gap-2 sm:gap-4 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
+        <div class="flex items-center gap-1.5" title="Elementos colocados en Fundaciones">
+          <span class="text-emerald-400 font-bold">⚛ Progreso:</span>
+          <span id="statProgress" class="font-mono-code font-bold text-white">0 / 118</span>
+        </div>
+        <div class="h-4 w-[1px] bg-slate-800"></div>
+        <div class="flex items-center gap-1.5" title="Movimientos realizados">
+          <span class="text-sky-400 font-bold">⇄ Movs:</span>
+          <span id="statMoves" class="font-mono-code font-bold text-white">0</span>
+        </div>
+        <div class="h-4 w-[1px] bg-slate-800"></div>
+        <div class="flex items-center gap-1.5" title="Tiempo de partida">
+          <span class="text-amber-400 font-bold">⏱</span>
+          <span id="statTimer" class="font-mono-code font-bold text-white">00:00</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button id="btnHint" onclick="triggerPedagogicalHint()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 transition shadow-sm" title="Obtener pista con explicación química">
+          <span>💡</span>
+          <span>Pista Química</span>
+        </button>
+
+        <button id="btnAutoFoundation" onclick="autoMoveOneToFoundation()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition" title="Enviar automáticamente una carta disponible a su Fundación">
+          <span>⬆</span>
+          <span class="hidden md:inline">Auto-Fundación</span>
+        </button>
+
+        <button id="btnUndo" onclick="undoLastMove()" disabled class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-200 border border-slate-700 transition" title="Deshacer último movimiento">
+          <span>↩</span>
+          <span class="hidden sm:inline">Deshacer</span>
+        </button>
+
+        <button onclick="openPeriodicTableModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/40 transition" title="Ver Mapa de la Tabla Periódica e inspeccionar elementos">
+          <span>🗺️</span>
+          <span>Mapa Periódico</span>
+        </button>
+
+        <button onclick="toggleConfigPanel()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-slate-950 transition shadow">
+          <span>⚙️</span>
+          <span>Configurar / Nueva</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- COLLAPSIBLE GAME SETTINGS & MODALITY BAR -->
+  <section id="configPanel" class="bg-slate-900/95 border-b border-slate-800 px-4 py-3 transition-all">
+    <div class="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+      
+      <!-- 1. Modalidad de Fundaciones -->
+      <div class="lg:col-span-2">
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-cyan-400 mb-1">
+          1. Modalidad de Agrupación (Fundaciones)
+        </label>
+        <select id="selectModality" onchange="onModalitySelectChange()" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-cyan-400">
+          <option value="blocks">Modalidad 1: Bloques de Orbitales (s, p, d, f) — Básico (4 Fundaciones)</option>
+          <option value="categories">Modalidad 2: Categorías Químicas — Intermedio (10 Fundaciones)</option>
+          <option value="groups">Modalidad 3: Grupos / Columnas (1 al 18 + Series f) — Avanzado</option>
+        </select>
+      </div>
+
+      <!-- 2. Regla de Alternancia en Tablero -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-sky-400 mb-1">
+          2. Regla de Alternancia (Tablero)
+        </label>
+        <select id="selectAlternation" onchange="updateActiveAlternationRule()" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-white focus:outline-none focus:border-sky-400">
+          <option value="block">Alternar Bloque Orbital distinto (s/p/d/f)</option>
+          <option value="character">Alternar Metal vs No Metal / Metaloide</option>
+          <option value="period">Alternar Paridad de Período (Par vs Impar)</option>
+        </select>
+      </div>
+
+      <!-- 3. Tamaño del Mazo -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-emerald-400 mb-1">
+          3. Tamaño del Mazo
+        </label>
+        <select id="selectDeckSize" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-semibold text-white focus:outline-none focus:border-emerald-400">
+          <option value="full">Mazo Completo (118 Elementos: ¹H a ¹¹⁸Og)</option>
+          <option value="representative">Sub-mazo Rápido: Representativos s y p (50 cartas)</option>
+        </select>
+      </div>
+
+      <!-- 4. Robo y Comodines -->
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-1">
+            Robo de Mazo
+          </label>
+          <select id="selectDrawCount" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs font-semibold text-white">
+            <option value="1">1 en 1 (Fácil)</option>
+            <option value="3">3 en 3 (Difícil)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-purple-400 mb-1">
+            Comodines Ion/Isótopo
+          </label>
+          <select id="selectWildcards" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs font-semibold text-white">
+            <option value="2" selected>2 Comodines</option>
+            <option value="4">4 Comodines</option>
+            <option value="0">0 (Sin comodines)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 5. Botón Iniciar Partida -->
+      <div class="flex gap-2">
+        <button onclick="startNewGame()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-xs py-2.5 px-4 rounded-lg shadow-lg transition flex items-center justify-center gap-1.5">
+          <span>🚀</span>
+          <span>Repartir Nueva Partida</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Sub-option for Modality 3 (Group 3 integration toggle) -->
+    <div id="group3ModeContainer" class="max-w-[1600px] mx-auto mt-2.5 pt-2 border-t border-slate-800/80 hidden flex-wrap items-center justify-between text-xs text-slate-300 gap-2">
+      <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700 font-semibold">Opciones Modalidad 3 (Grupos):</span>
+        <label class="inline-flex items-center gap-1.5 cursor-pointer">
+          <input type="radio" name="group3Option" value="auxiliary" checked onchange="startNewGame()" class="accent-cyan-400">
+          <span>18 Grupos + 2 Fundaciones Auxiliares para Lantánidos y Actínidos (Recomendado)</span>
+        </label>
+        <label class="inline-flex items-center gap-1.5 cursor-pointer ml-3">
+          <input type="radio" name="group3Option" value="integrated" onchange="startNewGame()" class="accent-cyan-400">
+          <span>Integrar Lantánidos y Actínidos dentro de la pila del Grupo 3 (18 pilas estrictas)</span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACTIVE RULES & PEDAGOGICAL FEEDBACK BANNER -->
+  <div class="bg-slate-950/80 border-b border-slate-800/80 px-3 py-1.5">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-bold text-slate-400">Reglas Activas en Tablero:</span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-300 font-medium">
+          1. Orden Descendente con Saltos (<strong class="font-mono-code">Z<sub>destino</sub> &lt; Z<sub>base</sub></strong>)
+        </span>
+        <span id="activeAlternationBadge" class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-sky-300 font-medium">
+          2. Alternar Bloque Orbital distinto (s ≠ p ≠ d ≠ f)
+        </span>
+        <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 font-medium">
+          3. Columna vacía: Período 7, Rey de Fundación o Comodín
+        </span>
+      </div>
+      <div class="text-[11px] text-slate-400">
+        💡 <em>Tip: Haz <strong>doble clic</strong> sobre cualquier carta para enviarla directo a su Fundación o consulta su ficha con el botón <strong>ℹ</strong>.</em>
+      </div>
+    </div>
+  </div>
+
+  <!-- PEDAGOGICAL MESSAGE / HINT TOAST BAR -->
+  <div id="pedagogicalBanner" class="hidden bg-gradient-to-r from-amber-950/90 via-slate-900 to-amber-950/90 border-b border-amber-500/40 px-4 py-2.5 shadow-md">
+    <div class="max-w-[1600px] mx-auto flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 text-xs sm:text-sm">
+        <span id="pedagogicalIcon" class="text-lg">🧪</span>
+        <div id="pedagogicalText" class="text-amber-100 font-medium leading-snug"></div>
+      </div>
+      <button onclick="hidePedagogicalBanner()" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0">
+        Cerrar ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN GAME BOARD -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto px-2 sm:px-4 py-4 flex flex-col gap-5">
+
+    <!-- TOP ZONE: STOCK, WASTE & FOUNDATIONS -->
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      
+      <!-- Left: Stock & Waste + Wildcard Reserve Info (3 cols on xl) -->
+      <div class="xl:col-span-3 bg-slate-900/60 border border-slate-800/90 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <span>🎴</span> Mazo y Descarte
+          </span>
+          <span id="stockCounterBadge" class="text-[11px] font-mono-code px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-bold">
+            Restantes: 0
+          </span>
+        </div>
+
+        <div class="flex items-center gap-3 sm:gap-4 justify-center sm:justify-start py-1">
+          <!-- Stock Pile -->
+          <div class="flex flex-col items-center gap-1">
+            <div id="stockSlot" onclick="drawFromStock()" class="card-slot flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400 group relative select-none" title="Haz clic para robar carta(s) del mazo">
+              <!-- Populated by JS -->
+            </div>
+            <span class="text-[10px] font-semibold text-slate-400 uppercase">Mazo (Robar)</span>
+          </div>
+
+          <!-- Waste Pile (fan of up to 3 visible cards) -->
+          <div class="flex flex-col items-center gap-1">
+            <div id="wasteContainer" class="relative" style="width: calc(var(--card-w) + 36px); height: var(--card-h);">
+              <!-- Populated by JS -->
+            </div>
+            <span class="text-[10px] font-semibold text-slate-400 uppercase">Descarte</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Foundations Zone (9 cols on xl) -->
+      <div class="xl:col-span-9 bg-slate-900/60 border border-slate-800/90 rounded-2xl p-3 flex flex-col gap-2.5 shadow-inner">
+        <div class="flex flex-wrap items-center justify-between border-b border-slate-800 pb-1.5 gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <span>🏛️</span> Fundaciones Objetivo (Orden Ascendente de Z)
+            </span>
+            <span id="modalitySubtitle" class="text-xs text-slate-400 font-medium"></span>
+          </div>
+          <span class="text-[11px] text-slate-400">
+            Haz clic en cualquier fundación para ver su secuencia completa de elementos
+          </span>
+        </div>
+
+        <!-- Dynamic Foundations Grid -->
+        <div id="foundationsGrid" class="flex flex-wrap gap-2.5 justify-center sm:justify-start">
+          <!-- Populated dynamically by JS according to Modality 1 (4), Modality 2 (10), or Modality 3 (18-20) -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- BOTTOM ZONE: TABLEAU (7 ESCALONATED COLUMNS) -->
+    <div class="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-3 sm:p-4 flex-1 flex flex-col gap-3">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-sky-400">
+            🧪 El Tablero (7 Columnas Escalonadas)
+          </span>
+          <span class="text-[11px] text-slate-400 hidden md:inline">
+            — Apila de mayor a menor Número Atómico (Z) respetando la regla de alternancia activa
+          </span>
+        </div>
+        <div id="selectionStatusLabel" class="text-xs font-semibold text-cyan-300 hidden">
+          Carta seleccionada: haz clic en una columna o fundación destino
+        </div>
+      </div>
+
+      <!-- 7 Tableau Columns Container -->
+      <div id="tableauGrid" class="grid grid-cols-7 gap-1.5 sm:gap-3 md:gap-4 justify-items-center min-h-[480px] pb-24">
+        <!-- 7 Columns rendered by JS -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL 1: INTERACTIVE PERIODIC TABLE MAP & ELEMENT INSPECTOR -->
+  <div id="periodicTableModal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-[1440px] w-full max-h-[94vh] flex flex-col shadow-2xl overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="px-4 py-3 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5">
+          <span class="text-xl">🗺️</span>
+          <div>
+            <h2 class="text-base font-extrabold text-white">Mapa Interactivo de la Tabla Periódica (Estado de la Partida)</h2>
+            <p class="text-xs text-slate-400">Haz clic sobre cualquier elemento para inspeccionar su configuración electrónica, bloque, familia y ubicación actual</p>
+          </div>
+        </div>
+        <!-- Legend -->
+        <div class="flex flex-wrap items-center gap-3 text-xs">
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-sm bg-emerald-500 inline-block ring-2 ring-emerald-300"></span>
+            <span class="text-emerald-300 font-semibold">En Fundación</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-sm bg-sky-500 inline-block ring-2 ring-sky-300"></span>
+            <span class="text-sky-300 font-semibold">Visible en Tablero/Descarte</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3 h-3 rounded-sm bg-slate-700 inline-block"></span>
+            <span class="text-slate-400">Oculto / En Mazo</span>
+          </span>
+          <button onclick="closePeriodicTableModal()" class="ml-2 px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold">
+            Cerrar ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Content: Periodic Grid + Selected Element Inspector -->
+      <div class="p-4 overflow-y-auto flex-1 flex flex-col lg:flex-row gap-4">
+        
+        <!-- 18-Column Periodic Table Container -->
+        <div class="flex-1 overflow-x-auto pb-2">
+          <div id="ptInteractiveGrid" class="pt-grid min-w-[820px]">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Element Technical Card Inspector -->
+        <div id="elementInspectorPanel" class="w-full lg:w-80 bg-slate-950/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shrink-0">
+          <!-- Populated by JS -->
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: FOUNDATION SEQUENCE INSPECTOR -->
+  <div id="foundationDetailModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+        <div>
+          <h3 id="fModalTitle" class="text-base font-extrabold text-white">Secuencia de la Fundación</h3>
+          <p id="fModalSubtitle" class="text-xs text-slate-400"></p>
+        </div>
+        <button onclick="closeFoundationDetailModal()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300">
+          Cerrar ✕
+        </button>
+      </div>
+      <div id="fModalSequenceList" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-[60vh] overflow-y-auto p-1">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: VICTORY SCREEN -->
+  <div id="victoryModal" class="fixed inset-0 z-50 hidden bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-emerald-500/60 rounded-2xl max-w-lg w-full p-6 text-center shadow-2xl">
+      <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-4xl">
+        🏆
+      </div>
+      <h2 class="text-2xl font-extrabold text-white mb-1">¡Tabla Periódica Completada!</h2>
+      <p id="victorySubtitle" class="text-xs text-emerald-300 font-semibold mb-4">
+        Has ordenado todos los elementos químicos en sus fundaciones correspondientes.
+      </p>
+
+      <div class="grid grid-cols-3 gap-2.5 bg-slate-900/90 border border-slate-800 rounded-xl p-3 mb-5 text-xs">
+        <div>
+          <div class="text-slate-400">Elementos</div>
+          <div id="vicElements" class="text-base font-extrabold text-emerald-400 font-mono-code">118 / 118</div>
+        </div>
+        <div>
+          <div class="text-slate-400">Movimientos</div>
+          <div id="vicMoves" class="text-base font-extrabold text-sky-400 font-mono-code">0</div>
+        </div>
+        <div>
+          <div class="text-slate-400">Tiempo Total</div>
+          <div id="vicTime" class="text-base font-extrabold text-amber-400 font-mono-code">00:00</div>
+        </div>
+      </div>
+
+      <div class="flex gap-3 justify-center">
+        <button onclick="closeVictoryModal(); openPeriodicTableModal();" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700">
+          🗺️ Ver Tabla Completada
+        </button>
+        <button onclick="closeVictoryModal(); startNewGame();" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-xs font-extrabold text-slate-950 shadow-lg">
+          🚀 Jugar Otra Partida
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPLETE APPLICATION SCRIPT -->
+  <script>
+    /***************************************************************************
+     * 1. COMPLETE CHEMICAL DATABASE OF THE 118 ELEMENTS + CATEGORIES & BLOCKS
+     ***************************************************************************/
+    const CATEGORIES = {
+      reactive_nonmetals: {
+        id: 'reactive_nonmetals',
+        name: 'No metales reactivos',
+        shortName: 'No Metal',
+        color: '#22c55e',
+        bgClass: 'from-emerald-950/95 to-slate-900',
+        borderClass: 'border-emerald-500/70',
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+        isMetal: false
+      },
+      noble_gases: {
+        id: 'noble_gases',
+        name: 'Gases nobles',
+        shortName: 'Gas Noble',
+        color: '#a855f7',
+        bgClass: 'from-purple-950/95 to-slate-900',
+        borderClass: 'border-purple-500/70',
+        badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+        isMetal: false
+      },
+      alkali_metals: {
+        id: 'alkali_metals',
+        name: 'Metales alcalinos',
+        shortName: 'Alcalino',
+        color: '#ef4444',
+        bgClass: 'from-red-950/95 to-slate-900',
+        borderClass: 'border-red-500/70',
+        badgeClass: 'bg-red-500/20 text-red-300 border-red-500/40',
+        isMetal: true
+      },
+      alkaline_earth: {
+        id: 'alkaline_earth',
+        name: 'Metales alcalinotérreos',
+        shortName: 'Alcalinotérreo',
+        color: '#f97316',
+        bgClass: 'from-orange-950/95 to-slate-900',
+        borderClass: 'border-orange-500/70',
+        badgeClass: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+        isMetal: true
+      },
+      metalloids: {
+        id: 'metalloids',
+        name: 'Metaloides',
+        shortName: 'Metaloide',
+        color: '#14b8a6',
+        bgClass: 'from-teal-950/95 to-slate-900',
+        borderClass: 'border-teal-400/70',
+        badgeClass: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+        isMetal: false
+      },
+      halogens: {
+        id: 'halogens',
+        name: 'Halógenos',
+        shortName: 'Halógeno',
+        color: '#06b6d4',
+        bgClass: 'from-cyan-950/95 to-slate-900',
+        borderClass: 'border-cyan-400/70',
+        badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+        isMetal: false
+      },
+      post_transition: {
+        id: 'post_transition',
+        name: 'Metales post-transición',
+        shortName: 'Post-transición',
+        color: '#3b82f6',
+        bgClass: 'from-blue-950/95 to-slate-900',
+        borderClass: 'border-blue-500/70',
+        badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+        isMetal: true
+      },
+      transition_metals: {
+        id: 'transition_metals',
+        name: 'Metales de transición',
+        shortName: 'Transición',
+        color: '#eab308',
+        bgClass: 'from-amber-950/90 to-slate-900',
+        borderClass: 'border-amber-500/70',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+        isMetal: true
+      },
+      lanthanides: {
+        id: 'lanthanides',
+        name: 'Lantánidos',
+        shortName: 'Lantánido',
+        color: '#ec4899',
+        bgClass: 'from-pink-950/95 to-slate-900',
+        borderClass: 'border-pink-500/70',
+        badgeClass: 'bg-pink-500/20 text-pink-300 border-pink-500/40',
+        isMetal: true
+      },
+      actinides: {
+        id: 'actinides',
+        name: 'Actínidos',
+        shortName: 'Actínido',
+        color: '#f43f5e',
+        bgClass: 'from-rose-950/95 to-slate-900',
+        borderClass: 'border-rose-500/70',
+        badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+        isMetal: true
+      }
+    };
+
+    const BLOCK_COLORS = {
+      s: { label: 'Bloque s', badge: 'bg-rose-500/25 text-rose-300 border-rose-400/50', hex: '#f43f5e' },
+      p: { label: 'Bloque p', badge: 'bg-emerald-500/25 text-emerald-300 border-emerald-400/50', hex: '#10b981' },
+      d: { label: 'Bloque d', badge: 'bg-amber-500/25 text-amber-300 border-amber-400/50', hex: '#f59e0b' },
+      f: { label: 'Bloque f', badge: 'bg-purple-500/25 text-purple-300 border-purple-400/50', hex: '#a855f7' }
+    };
+
+    // Compact raw tuple list for all 118 elements:
+    // [Z, Symbol, SpanishName, Config, Group, Period, Block, CategoryID]
+    // Following exact specifications in the prompt:
+    // - IUPAC block f: 57-La to 70-Yb (14) and 89-Ac to 102-No (14) = 28 cards.
+    // - IUPAC block d: includes 71-Lu and 103-Lr in Group 3 (40 cards total in block d).
+    // - Categories: Lanthanides (57-La to 71-Lu = 15), Actinides (89-Ac to 103-Lr = 15),
+    //   Transition metals (38), Post-transition (12), Metalloids (7, including 85-At), Halogens (5: F, Cl, Br, I, Ts).
+    const RAW_ELEMENTS = [
+      [1, 'H', 'Hidrógeno', '1s¹', 1, 1, 's', 'reactive_nonmetals'],
+      [2, 'He', 'Helio', '1s²', 18, 1, 's', 'noble_gases'],
+      [3, 'Li', 'Litio', '[He] 2s¹', 1, 2, 's', 'alkali_metals'],
+      [4, 'Be', 'Berilio', '[He] 2s²', 2, 2, 's', 'alkaline_earth'],
+      [5, 'B', 'Boro', '[He] 2s² 2p¹', 13, 2, 'p', 'metalloids'],
+      [6, 'C', 'Carbono', '[He] 2s² 2p²', 14, 2, 'p', 'reactive_nonmetals'],
+      [7, 'N', 'Nitrógeno', '[He] 2s² 2p³', 15, 2, 'p', 'reactive_nonmetals'],
+      [8, 'O', 'Oxígeno', '[He] 2s² 2p⁴', 16, 2, 'p', 'reactive_nonmetals'],
+      [9, 'F', 'Flúor', '[He] 2s² 2p⁵', 17, 2, 'p', 'halogens'],
+      [10, 'Ne', 'Neón', '[He] 2s² 2p⁶', 18, 2, 'p', 'noble_gases'],
+      [11, 'Na', 'Sodio', '[Ne] 3s¹', 1, 3, 's', 'alkali_metals'],
+      [12, 'Mg', 'Magnesio', '[Ne] 3s²', 2, 3, 's', 'alkaline_earth'],
+      [13, 'Al', 'Aluminio', '[Ne] 3s² 3p¹', 13, 3, 'p', 'post_transition'],
+      [14, 'Si', 'Silicio', '[Ne] 3s² 3p²', 14, 3, 'p', 'metalloids'],
+      [15, 'P', 'Fósforo', '[Ne] 3s² 3p³', 15, 3, 'p', 'reactive_nonmetals'],
+      [16, 'S', 'Azufre', '[Ne] 3s² 3p⁴', 16, 3, 'p', 'reactive_nonmetals'],
+      [17, 'Cl', 'Cloro', '[Ne] 3s² 3p⁵', 17, 3, 'p', 'halogens'],
+      [18, 'Ar', 'Argón', '[Ne] 3s² 3p⁶', 18, 3, 'p', 'noble_gases'],
+      [19, 'K', 'Potasio', '[Ar] 4s¹', 1, 4, 's', 'alkali_metals'],
+      [20, 'Ca', 'Calcio', '[Ar] 4s²', 2, 4, 's', 'alkaline_earth'],
+      [21, 'Sc', 'Escandio', '[Ar] 3d¹ 4s²', 3, 4, 'd', 'transition_metals'],
+      [22, 'Ti', 'Titanio', '[Ar] 3d² 4s²', 4, 4, 'd', 'transition_metals'],
+      [23, 'V', 'Vanadio', '[Ar] 3d³ 4s²', 5, 4, 'd', 'transition_metals'],
+      [24, 'Cr', 'Cromo', '[Ar] 3d⁵ 4s¹', 6, 4, 'd', 'transition_metals'],
+      [25, 'Mn', 'Manganeso', '[Ar] 3d⁵ 4s²', 7, 4, 'd', 'transition_metals'],
+      [26, 'Fe', 'Hierro', '[Ar] 3d⁶ 4s²', 8, 4, 'd', 'transition_metals'],
+      [27, 'Co', 'Cobalto', '[Ar] 3d⁷ 4s²', 9, 4, 'd', 'transition_metals'],
+      [28, 'Ni', 'Níquel', '[Ar] 3d⁸ 4s²', 10, 4, 'd', 'transition_metals'],
+      [29, 'Cu', 'Cobre', '[Ar] 3d¹⁰ 4s¹', 11, 4, 'd', 'transition_metals'],
+      [30, 'Zn', 'Cinc', '[Ar] 3d¹⁰ 4s²', 12, 4, 'd', 'transition_metals'],
+      [31, 'Ga', 'Galio', '[Ar] 3d¹⁰ 4s² 4p¹', 13, 4, 'p', 'post_transition'],
+      [32, 'Ge', 'Germanio', '[Ar] 3d¹⁰ 4s² 4p²', 14, 4, 'p', 'metalloids'],
+      [33, 'As', 'Arsénico', '[Ar] 3d¹⁰ 4s² 4p³', 15, 4, 'p', 'metalloids'],
+      [34, 'Se', 'Selenio', '[Ar] 3d¹⁰ 4s² 4p⁴', 16, 4, 'p', 'reactive_nonmetals'],
+      [35, 'Br', 'Bromo', '[Ar] 3d¹⁰ 4s² 4p⁵', 17, 4, 'p', 'halogens'],
+      [36, 'Kr', 'Kriptón', '[Ar] 3d¹⁰ 4s² 4p⁶', 18, 4, 'p', 'noble_gases'],
+      [37, 'Rb', 'Rubidio', '[Kr] 5s¹', 1, 5, 's', 'alkali_metals'],
+      [38, 'Sr', 'Estroncio', '[Kr] 5s²', 2, 5, 's', 'alkaline_earth'],
+      [39, 'Y', 'Itrio', '[Kr] 4d¹ 5s²', 3, 5, 'd', 'transition_metals'],
+      [40, 'Zr', 'Circonio', '[Kr] 4d² 5s²', 4, 5, 'd', 'transition_metals'],
+      [41, 'Nb', 'Niobio', '[Kr] 4d⁴ 5s¹', 5, 5, 'd', 'transition_metals'],
+      [42, 'Mo', 'Molibdeno', '[Kr] 4d⁵ 5s¹', 6, 5, 'd', 'transition_metals'],
+      [43, 'Tc', 'Tecnecio', '[Kr] 4d⁵ 5s²', 7, 5, 'd', 'transition_metals'],
+      [44, 'Ru', 'Rutenio', '[Kr] 4d⁷ 5s¹', 8, 5, 'd', 'transition_metals'],
+      [45, 'Rh', 'Rodio', '[Kr] 4d⁸ 5s¹', 9, 5, 'd', 'transition_metals'],
+      [46, 'Pd', 'Paladio', '[Kr] 4d¹⁰', 10, 5, 'd', 'transition_metals'],
+      [47, 'Ag', 'Plata', '[Kr] 4d¹⁰ 5s¹', 11, 5, 'd', 'transition_metals'],
+      [48, 'Cd', 'Cadmio', '[Kr] 4d¹⁰ 5s²', 12, 5, 'd', 'transition_metals'],
+      [49, 'In', 'Indio', '[Kr] 4d¹⁰ 5s² 5p¹', 13, 5, 'p', 'post_transition'],
+      [50, 'Sn', 'Estaño', '[Kr] 4d¹⁰ 5s² 5p²', 14, 5, 'p', 'post_transition'],
+      [51, 'Sb', 'Antimonio', '[Kr] 4d¹⁰ 5s² 5p³', 15, 5, 'p', 'metalloids'],
+      [52, 'Te', 'Telurio', '[Kr] 4d¹⁰ 5s² 5p⁴', 16, 5, 'p', 'metalloids'],
+      [53, 'I', 'Yodo', '[Kr] 4d¹⁰ 5s² 5p⁵', 17, 5, 'p', 'halogens'],
+      [54, 'Xe', 'Xenón', '[Kr] 4d¹⁰ 5s² 5p⁶', 18, 5, 'p', 'noble_gases'],
+      [55, 'Cs', 'Cesio', '[Xe] 6s¹', 1, 6, 's', 'alkali_metals'],
+      [56, 'Ba', 'Bario', '[Xe] 6s²', 2, 6, 's', 'alkaline_earth'],
+      [57, 'La', 'Lantano', '[Xe] 5d¹ 6s²', 3, 6, 'f', 'lanthanides'],
+      [58, 'Ce', 'Cerio', '[Xe] 4f¹ 5d¹ 6s²', 3, 6, 'f', 'lanthanides'],
+      [59, 'Pr', 'Praseodimio', '[Xe] 4f³ 6s²', 3, 6, 'f', 'lanthanides'],
+      [60, 'Nd', 'Neodimio', '[Xe] 4f⁴ 6s²', 3, 6, 'f', 'lanthanides'],
+      [61, 'Pm', 'Prometio', '[Xe] 4f⁵ 6s²', 3, 6, 'f', 'lanthanides'],
+      [62, 'Sm', 'Samario', '[Xe] 4f⁶ 6s²', 3, 6, 'f', 'lanthanides'],
+      [63, 'Eu', 'Europio', '[Xe] 4f⁷ 6s²', 3, 6, 'f', 'lanthanides'],
+      [64, 'Gd', 'Gadolinio', '[Xe] 4f⁷ 5d¹ 6s²', 3, 6, 'f', 'lanthanides'],
+      [65, 'Tb', 'Terbio', '[Xe] 4f⁹ 6s²', 3, 6, 'f', 'lanthanides'],
+      [66, 'Dy', 'Disprosio', '[Xe] 4f¹⁰ 6s²', 3, 6, 'f', 'lanthanides'],
+      [67, 'Ho', 'Holmio', '[Xe] 4f¹¹ 6s²', 3, 6, 'f', 'lanthanides'],
+      [68, 'Er', 'Erbio', '[Xe] 4f¹² 6s²', 3, 6, 'f', 'lanthanides'],
+      [69, 'Tm', 'Tulio', '[Xe] 4f¹³ 6s²', 3, 6, 'f', 'lanthanides'],
+      [70, 'Yb', 'Iterbio', '[Xe] 4f¹⁴ 6s²', 3, 6, 'f', 'lanthanides'],
+      [71, 'Lu', 'Lutecio', '[Xe] 4f¹⁴ 5d¹ 6s²', 3, 6, 'd', 'lanthanides'],
+      [72, 'Hf', 'Hafnio', '[Xe] 4f¹⁴ 5d² 6s²', 4, 6, 'd', 'transition_metals'],
+      [73, 'Ta', 'Tántalo', '[Xe] 4f¹⁴ 5d³ 6s²', 5, 6, 'd', 'transition_metals'],
+      [74, 'W', 'Wolframio', '[Xe] 4f¹⁴ 5d⁴ 6s²', 6, 6, 'd', 'transition_metals'],
+      [75, 'Re', 'Renio', '[Xe] 4f¹⁴ 5d⁵ 6s²', 7, 6, 'd', 'transition_metals'],
+      [76, 'Os', 'Osmio', '[Xe] 4f¹⁴ 5d⁶ 6s²', 8, 6, 'd', 'transition_metals'],
+      [77, 'Ir', 'Iridio', '[Xe] 4f¹⁴ 5d⁷ 6s²', 9, 6, 'd', 'transition_metals'],
+      [78, 'Pt', 'Platino', '[Xe] 4f¹⁴ 5d⁹ 6s¹', 10, 6, 'd', 'transition_metals'],
+      [79, 'Au', 'Oro', '[Xe] 4f¹⁴ 5d¹⁰ 6s¹', 11, 6, 'd', 'transition_metals'],
+      [80, 'Hg', 'Mercurio', '[Xe] 4f¹⁴ 5d¹⁰ 6s²', 12, 6, 'd', 'transition_metals'],
+      [81, 'Tl', 'Talio', '[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p¹', 13, 6, 'p', 'post_transition'],
+      [82, 'Pb', 'Plomo', '[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p²', 14, 6, 'p', 'post_transition'],
+      [83, 'Bi', 'Bismuto', '[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p³', 15, 6, 'p', 'post_transition'],
+      [84, 'Po', 'Polonio', '[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p⁴', 16, 6, 'p', 'post_transition'],
+      [85, 'At', 'Astato', '[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p⁵', 17, 6, 'p', 'metalloids'],
+      [86, 'Rn', 'Radón', '[Xe] 4f¹⁴ 5d¹⁰ 6s² 6p⁶', 18, 6, 'p', 'noble_gases'],
+      [87, 'Fr', 'Francio', '[Rn] 7s¹', 1, 7, 's', 'alkali_metals'],
+      [88, 'Ra', 'Radio', '[Rn] 7s²', 2, 7, 's', 'alkaline_earth'],
+      [89, 'Ac', 'Actinio', '[Rn] 6d¹ 7s²', 3, 7, 'f', 'actinides'],
+      [90, 'Th', 'Torio', '[Rn] 6d² 7s²', 3, 7, 'f', 'actinides'],
+      [91, 'Pa', 'Protactinio', '[Rn] 5f² 6d¹ 7s²', 3, 7, 'f', 'actinides'],
+      [92, 'U', 'Uranio', '[Rn] 5f³ 6d¹ 7s²', 3, 7, 'f', 'actinides'],
+      [93, 'Np', 'Neptunio', '[Rn] 5f⁴ 6d¹ 7s²', 3, 7, 'f', 'actinides'],
+      [94, 'Pu', 'Plutonio', '[Rn] 5f⁶ 7s²', 3, 7, 'f', 'actinides'],
+      [95, 'Am', 'Americio', '[Rn] 5f⁷ 7s²', 3, 7, 'f', 'actinides'],
+      [96, 'Cm', 'Curio', '[Rn] 5f⁷ 6d¹ 7s²', 3, 7, 'f', 'actinides'],
+      [97, 'Bk', 'Berkelio', '[Rn] 5f⁹ 7s²', 3, 7, 'f', 'actinides'],
+      [98, 'Cf', 'Californio', '[Rn] 5f¹⁰ 7s²', 3, 7, 'f', 'actinides'],
+      [99, 'Es', 'Einstenio', '[Rn] 5f¹¹ 7s²', 3, 7, 'f', 'actinides'],
+      [100, 'Fm', 'Fermio', '[Rn] 5f¹² 7s²', 3, 7, 'f', 'actinides'],
+      [101, 'Md', 'Mendelevio', '[Rn] 5f¹³ 7s²', 3, 7, 'f', 'actinides'],
+      [102, 'No', 'Nobelio', '[Rn] 5f¹⁴ 7s²', 3, 7, 'f', 'actinides'],
+      [103, 'Lr', 'Lawrencio', '[Rn] 5f¹⁴ 7s² 7p¹', 3, 7, 'd', 'actinides'],
+      [104, 'Rf', 'Rutherfordio', '[Rn] 5f¹⁴ 6d² 7s²', 4, 7, 'd', 'transition_metals'],
+      [105, 'Db', 'Dubnio', '[Rn] 5f¹⁴ 6d³ 7s²', 5, 7, 'd', 'transition_metals'],
+      [106, 'Sg', 'Seaborgio', '[Rn] 5f¹⁴ 6d⁴ 7s²', 6, 7, 'd', 'transition_metals'],
+      [107, 'Bh', 'Bohrio', '[Rn] 5f¹⁴ 6d⁵ 7s²', 7, 7, 'd', 'transition_metals'],
+      [108, 'Hs', 'Hasio', '[Rn] 5f¹⁴ 6d⁶ 7s²', 8, 7, 'd', 'transition_metals'],
+      [109, 'Mt', 'Meitnerio', '[Rn] 5f¹⁴ 6d⁷ 7s²', 9, 7, 'd', 'transition_metals'],
+      [110, 'Ds', 'Darmstatio', '[Rn] 5f¹⁴ 6d⁸ 7s²', 10, 7, 'd', 'transition_metals'],
+      [111, 'Rg', 'Roentgenio', '[Rn] 5f¹⁴ 6d⁹ 7s²', 11, 7, 'd', 'transition_metals'],
+      [112, 'Cn', 'Copernicio', '[Rn] 5f¹⁴ 6d¹⁰ 7s²', 12, 7, 'd', 'transition_metals'],
+      [113, 'Nh', 'Nihonio', '[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p¹', 13, 7, 'p', 'post_transition'],
+      [114, 'Fl', 'Flerovio', '[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p²', 14, 7, 'p', 'post_transition'],
+      [115, 'Mc', 'Moscovio', '[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p³', 15, 7, 'p', 'post_transition'],
+      [116, 'Lv', 'Livermorio', '[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p⁴', 16, 7, 'p', 'post_transition'],
+      [117, 'Ts', 'Teneso', '[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p⁵', 17, 7, 'p', 'halogens'],
+      [118, 'Og', 'Oganesón', '[Rn] 5f¹⁴ 6d¹⁰ 7s² 7p⁶', 18, 7, 'p', 'noble_gases']
+    ];
+
+    const ELEMENTS_DB = RAW_ELEMENTS.map(([z, symbol, name, config, group, period, block, categoryId]) => ({
+      id: `el_${z}`,
+      isWildcard: false,
+      z,
+      symbol,
+      name,
+      config,
+      group,
+      period,
+      block,
+      categoryId,
+      isMetal: CATEGORIES[categoryId].isMetal
+    }));
+
+    const ELEMENT_BY_Z = {};
+    ELEMENTS_DB.forEach(el => { ELEMENT_BY_Z[el.z] = el; });
+
+    // 4 Optional Wildcards (Comodines de Isótopo / Ion)
+    const WILDCARDS_DB = [
+      {
+        id: 'wild_1',
+        isWildcard: true,
+        z: 0,
+        symbol: '¹⁴C*',
+        name: 'Isótopo Carbono-14',
+        config: 'Comodín Nuclear β⁻',
+        subtitle: 'Puente Universal / Desbloqueo',
+        flavor: 'Se apila sobre cualquier carta o libera una carta atrapada.'
+      },
+      {
+        id: 'wild_2',
+        isWildcard: true,
+        z: 0,
+        symbol: 'Cat⁺',
+        name: 'Ion Catión Libre',
+        config: 'Comodín Electroquímico',
+        subtitle: 'Puente Universal / Desbloqueo',
+        flavor: 'Acepta cualquier elemento encima sin restricción de Z.'
+      },
+      {
+        id: 'wild_3',
+        isWildcard: true,
+        z: 0,
+        symbol: '²³⁵U*',
+        name: 'Isótopo Fisible U-235',
+        config: 'Comodín de Transmutación',
+        subtitle: 'Puente Universal / Desbloqueo',
+        flavor: 'Desbloquea columnas o enlaza secuencias discontinuas.'
+      },
+      {
+        id: 'wild_4',
+        isWildcard: true,
+        z: 0,
+        symbol: 'An⁻',
+        name: 'Ion Anión Solvatado',
+        config: 'Comodín de Valencia',
+        subtitle: 'Puente Universal / Desbloqueo',
+        flavor: 'Conecta cualquier par de elementos en el tablero.'
+      }
+    ];
+
+    /***************************************************************************
+     * 2. SOUND SYNTHESIZER (Web Audio API - No External Assets Required)
+     ***************************************************************************/
+    let audioCtx = null;
+    function playTone(freq = 440, duration = 0.08, type = 'sine', gainVal = 0.07) {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        // Ignore audio errors if blocked by browser autoplay policy
+      }
+    }
+
+    function playSoundEffect(kind) {
+      if (kind === 'move') {
+        playTone(360, 0.06, 'triangle', 0.06);
+      } else if (kind === 'foundation') {
+        playTone(523.25, 0.08, 'sine', 0.08);
+        setTimeout(() => playTone(659.25, 0.11, 'sine', 0.08), 65);
+      } else if (kind === 'error') {
+        playTone(180, 0.14, 'sawtooth', 0.05);
+      } else if (kind === 'hint') {
+        playTone(587.33, 0.09, 'sine', 0.07);
+        setTimeout(() => playTone(880, 0.14, 'sine', 0.07), 80);
+      } else if (kind === 'win') {
+        [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => {
+          setTimeout(() => playTone(f, 0.18, 'triangle', 0.09), idx * 110);
+        });
+      }
+    }
+
+    /***************************************************************************
+     * 3. GAME STATE & FOUNDATION BUILDERS BY MODALITY
+     ***************************************************************************/
+    let gameState = {
+      modality: 'blocks',          // 'blocks' | 'categories' | 'groups'
+      alternationRule: 'block',    // 'block' | 'character' | 'period'
+      deckSizeMode: 'full',        // 'full' (118) | 'representative' (50: s & p blocks)
+      drawCount: 1,                // 1 | 3
+      wildcardCount: 2,            // 0 | 2 | 4
+      group3Option: 'auxiliary',   // 'auxiliary' (20 piles) | 'integrated' (18 piles)
+
+      activeElementsCount: 118,
+      closingZSet: new Set(),      // Elements that close a foundation (act as Kings for empty columns)
+
+      stock: [],                   // Array of card objects (faceDown)
+      waste: [],                   // Array of card objects (faceUp)
+      foundations: [],             // Array of foundation descriptors + cards[]
+      tableau: [[], [], [], [], [], [], []], // 7 columns of card objects
+
+      moves: 0,
+      secondsElapsed: 0,
+      timerInterval: null,
+      history: [],                 // Undo stack of serialized states
+
+      selectedSource: null,        // { zone: 'waste'|'tableau', colIdx, cardIdx }
+      hintHighlight: null,         // { source, target }
+      inspectedElementZ: 1
+    };
+
+    // Builds the foundations array according to modality and active deck filter
+    function buildFoundationsForModality(modality, deckElements, group3Option) {
+      const presentZ = new Set(deckElements.map(e => e.z));
+      let rawFoundations = [];
+
+      if (modality === 'blocks') {
+        rawFoundations = [
+          {
+            id: 'f_block_s',
+            title: 'Bloque s',
+            shortTitle: 'Bloque s',
+            subtitle: 'Orbitales esféricos (H, He, G1-G2)',
+            color: '#f43f5e',
+            badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/50',
+            sequence: ELEMENTS_DB.filter(e => e.block === 's').map(e => e.z)
+          },
+          {
+            id: 'f_block_p',
+            title: 'Bloque p',
+            shortTitle: 'Bloque p',
+            subtitle: 'Grupos 13 al 18 (excepto He)',
+            color: '#10b981',
+            badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50',
+            sequence: ELEMENTS_DB.filter(e => e.block === 'p').map(e => e.z)
+          },
+          {
+            id: 'f_block_d',
+            title: 'Bloque d',
+            shortTitle: 'Bloque d',
+            subtitle: 'Transición G3-G12 (incl. Lu y Lr)',
+            color: '#f59e0b',
+            badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
+            sequence: ELEMENTS_DB.filter(e => e.block === 'd').map(e => e.z)
+          },
+          {
+            id: 'f_block_f',
+            title: 'Bloque f',
+            shortTitle: 'Bloque f',
+            subtitle: 'Transición interna (57-70 y 89-102)',
+            color: '#a855f7',
+            badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/50',
+            sequence: ELEMENTS_DB.filter(e => e.block === 'f').map(e => e.z)
+          }
+        ];
+      } else if (modality === 'categories') {
+        const catOrder = [
+          'reactive_nonmetals',
+          'noble_gases',
+          'alkali_metals',
+          'alkaline_earth',
+          'metalloids',
+          'halogens',
+          'post_transition',
+          'transition_metals',
+          'lanthanides',
+          'actinides'
+        ];
+        rawFoundations = catOrder.map((catId, idx) => {
+          const cat = CATEGORIES[catId];
+          return {
+            id: `f_cat_${catId}`,
+            title: `${idx + 1}. ${cat.name}`,
+            shortTitle: cat.shortName,
+            subtitle: cat.isMetal ? 'Carácter Metálico' : 'No Metal / Metaloide',
+            color: cat.color,
+            badgeClass: cat.badgeClass,
+            sequence: ELEMENTS_DB.filter(e => e.categoryId === catId).map(e => e.z)
+          };
+        });
+      } else if (modality === 'groups') {
+        // 18 columns of the periodic table
+        for (let g = 1; g <= 18; g++) {
+          let seq = [];
+          if (g === 3 && group3Option === 'auxiliary') {
+            // Group 3 main column: 21-Sc, 39-Y, 71-Lu, 103-Lr
+            seq = [21, 39, 71, 103];
+          } else {
+            // Includes all elements with group === g in ascending Z
+            seq = ELEMENTS_DB.filter(e => e.group === g).map(e => e.z);
+          }
+          rawFoundations.push({
+            id: `f_grp_${g}`,
+            title: `Grupo ${g}`,
+            shortTitle: `G${g}`,
+            subtitle: g === 1 ? 'H + Alcalinos' : g === 2 ? 'Alcalinotérreos' : g === 17 ? 'Halógenos' : g === 18 ? 'Gases Nobles' : `Columna ${g}`,
+            color: g <= 2 ? '#f43f5e' : g <= 12 ? '#f59e0b' : '#10b981',
+            badgeClass: g <= 2 ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' : g <= 12 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+            sequence: seq
+          });
+        }
+
+        if (group3Option === 'auxiliary') {
+          rawFoundations.push({
+            id: 'f_grp_lanth',
+            title: 'Serie 4f: Lantánidos',
+            shortTitle: '4f Lant.',
+            subtitle: '57-La al 70-Yb (Período 6)',
+            color: '#ec4899',
+            badgeClass: 'bg-pink-500/20 text-pink-300 border-pink-500/40',
+            sequence: ELEMENTS_DB.filter(e => e.z >= 57 && e.z <= 70).map(e => e.z)
+          });
+          rawFoundations.push({
+            id: 'f_grp_act',
+            title: 'Serie 5f: Actínidos',
+            shortTitle: '5f Act.',
+            subtitle: '89-Ac al 102-No (Período 7)',
+            color: '#f43f5e',
+            badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+            sequence: ELEMENTS_DB.filter(e => e.z >= 89 && e.z <= 102).map(e => e.z)
+          });
+        }
+      }
+
+      // Filter sequences to only include elements present in the selected deck (e.g. 50-card s/p sub-deck)
+      // and omit foundations that have 0 cards in the current sub-deck
+      const filteredFoundations = rawFoundations
+        .map(f => ({
+          ...f,
+          sequence: f.sequence.filter(z => presentZ.has(z)),
+          cards: []
+        }))
+        .filter(f => f.sequence.length > 0);
+
+      return filteredFoundations;
+    }
+
+    /***************************************************************************
+     * 4. INITIALIZATION & NEW GAME SETUP
+     ***************************************************************************/
+    function onModalitySelectChange() {
+      const mod = document.getElementById('selectModality').value;
+      const altSelect = document.getElementById('selectAlternation');
+      const g3Container = document.getElementById('group3ModeContainer');
+
+      // Recommend ideal alternation rule per modality
+      if (mod === 'blocks') {
+        altSelect.value = 'block';
+      } else if (mod === 'categories') {
+        altSelect.value = 'character';
+      } else if (mod === 'groups') {
+        altSelect.value = 'period';
+      }
+
+      if (mod === 'groups') {
+        g3Container.classList.remove('hidden');
+        g3Container.classList.add('flex');
+      } else {
+        g3Container.classList.add('hidden');
+        g3Container.classList.remove('flex');
+      }
+
+      updateActiveAlternationRule();
+    }
+
+    function updateActiveAlternationRule() {
+      const alt = document.getElementById('selectAlternation').value;
+      gameState.alternationRule = alt;
+      const badge = document.getElementById('activeAlternationBadge');
+      if (alt === 'block') {
+        badge.innerHTML = '2. Alternar <strong>Bloque Orbital distinto</strong> (s ≠ p ≠ d ≠ f)';
+      } else if (alt === 'character') {
+        badge.innerHTML = '2. Alternar <strong>Metal vs No Metal / Metaloide</strong>';
+      } else if (alt === 'period') {
+        badge.innerHTML = '2. Alternar <strong>Paridad de Período</strong> (Período Par vs Impar)';
+      }
+      clearSelectionAndHints();
+      renderAll();
+    }
+
+    function toggleConfigPanel() {
+      const panel = document.getElementById('configPanel');
+      panel.classList.toggle('hidden');
+    }
+
+    function shuffleArray(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function startNewGame() {
+      // Read settings from UI controls
+      const modality = document.getElementById('selectModality').value;
+      const alternation = document.getElementById('selectAlternation').value;
+      const deckSizeMode = document.getElementById('selectDeckSize').value;
+      const drawCount = parseInt(document.getElementById('selectDrawCount').value, 10);
+      const wildcardCount = parseInt(document.getElementById('selectWildcards').value, 10);
+      const group3Radio = document.querySelector('input[name="group3Option"]:checked');
+      const group3Option = group3Radio ? group3Radio.value : 'auxiliary';
+
+      gameState.modality = modality;
+      gameState.alternationRule = alternation;
+      gameState.deckSizeMode = deckSizeMode;
+      gameState.drawCount = drawCount;
+      gameState.wildcardCount = wildcardCount;
+      gameState.group3Option = group3Option;
+
+      // Filter element cards according to deckSizeMode
+      let baseElements = [];
+      if (deckSizeMode === 'representative') {
+        baseElements = ELEMENTS_DB.filter(e => e.block === 's' || e.block === 'p');
+      } else {
+        baseElements = [...ELEMENTS_DB];
+      }
+
+      gameState.activeElementsCount = baseElements.length;
+      document.getElementById('deckBadge').textContent =
+        deckSizeMode === 'representative' ? '50 Representativos (s y p)' : '118 Elementos';
+
+      // Build Foundations
+      gameState.foundations = buildFoundationsForModality(modality, baseElements, group3Option);
+
+      // Compute closing elements (Kings of each foundation)
+      gameState.closingZSet = new Set();
+      gameState.foundations.forEach(f => {
+        if (f.sequence.length > 0) {
+          gameState.closingZSet.add(f.sequence[f.sequence.length - 1]);
+        }
+      });
+
+      // Assemble full deck (elements + optional wildcards)
+      const wildcards = WILDCARDS_DB.slice(0, wildcardCount).map(w => ({ ...w, faceUp: false }));
+      const deckCards = baseElements.map(e => ({ ...e, faceUp: false })).concat(wildcards);
+      const shuffled = shuffleArray(deckCards);
+
+      // Deal 7 tableau columns (1 to 7 cards, top card faceUp)
+      gameState.tableau = [[], [], [], [], [], [], []];
+      let deckCursor = 0;
+      for (let col = 0; col < 7; col++) {
+        for (let row = 0; row <= col; row++) {
+          const card = { ...shuffled[deckCursor++] };
+          card.faceUp = (row === col);
+          gameState.tableau[col].push(card);
+        }
+      }
+
+      // Remaining cards go to Stock
+      gameState.stock = shuffled.slice(deckCursor).map(c => ({ ...c, faceUp: false }));
+      gameState.waste = [];
+      gameState.moves = 0;
+      gameState.history = [];
+      gameState.selectedSource = null;
+      gameState.hintHighlight = null;
+
+      // Reset timer
+      if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+      gameState.secondsElapsed = 0;
+      updateTimerDisplay();
+      gameState.timerInterval = setInterval(() => {
+        gameState.secondsElapsed++;
+        updateTimerDisplay();
+      }, 1000);
+
+      updateActiveAlternationRule();
+      hidePedagogicalBanner();
+      renderAll();
+    }
+
+    function updateTimerDisplay() {
+      const mins = String(Math.floor(gameState.secondsElapsed / 60)).padStart(2, '0');
+      const secs = String(gameState.secondsElapsed % 60).padStart(2, '0');
+      document.getElementById('statTimer').textContent = `${mins}:${secs}`;
+    }
+
+    /***************************************************************************
+     * 5. CORE CHEMICAL STACKING & VALIDATION RULES
+     ***************************************************************************/
+
+    // Check if `movingCard` can be placed on top of `targetCard` in a Tableau column
+    function canStackOnTableauCard(movingCard, targetCard) {
+      if (!targetCard || !targetCard.faceUp) {
+        return { valid: false, reason: 'La carta destino está boca abajo.' };
+      }
+
+      // Wildcard rule: A wildcard can go on any face-up tableau card, and any card can go on a wildcard
+      if (movingCard.isWildcard) {
+        return {
+          valid: true,
+          reason: `${movingCard.symbol} (${movingCard.name}) es un Comodín y puede colocarse sobre cualquier elemento.`
+        };
+      }
+      if (targetCard.isWildcard) {
+        return {
+          valid: true,
+          reason: `El comodín ${targetCard.symbol} actúa como puente cuántico y acepta a ${movingCard.z}-${movingCard.symbol} encima.`
+        };
+      }
+
+      // Rule 1: Strictly descending Atomic Number (Z_moving < Z_target)
+      if (movingCard.z >= targetCard.z) {
+        return {
+          valid: false,
+          reason: `En el tablero el número atómico debe descender: ${movingCard.z}-${movingCard.symbol} (Z=${movingCard.z}) no es menor que ${targetCard.z}-${targetCard.symbol} (Z=${targetCard.z}).`
+        };
+      }
+
+      // Rule 2: Active Alternation Rule
+      const rule = gameState.alternationRule;
+      if (rule === 'block') {
+        if (movingCard.block === targetCard.block) {
+          return {
+            valid: false,
+            reason: `Debes alternar bloque orbital distinto: ambos pertenecen al Bloque ${movingCard.block}.`
+          };
+        }
+        return {
+          valid: true,
+          reason: `${movingCard.z}-${movingCard.symbol} (Z=${movingCard.z}, Bloque ${movingCard.block}) tiene menor Z que ${targetCard.z}-${targetCard.symbol} (Z=${targetCard.z}, Bloque ${targetCard.block}) y alterna bloque orbital (${movingCard.block} ≠ ${targetCard.block}).`
+        };
+      } else if (rule === 'character') {
+        if (movingCard.isMetal === targetCard.isMetal) {
+          const tipo = movingCard.isMetal ? 'Metales' : 'No Metales / Metaloides';
+          return {
+            valid: false,
+            reason: `Debes alternar Carácter Metálico vs No Metal/Metaloide: ambos son ${tipo}.`
+          };
+        }
+        const mChar = movingCard.isMetal ? 'Metal' : 'No Metal/Metaloide';
+        const tChar = targetCard.isMetal ? 'Metal' : 'No Metal/Metaloide';
+        return {
+          valid: true,
+          reason: `${movingCard.z}-${movingCard.symbol} (${mChar}) tiene menor Z (${movingCard.z} < ${targetCard.z}) y alterna carácter químico sobre ${targetCard.z}-${targetCard.symbol} (${tChar}).`
+        };
+      } else if (rule === 'period') {
+        const mParity = movingCard.period % 2;
+        const tParity = targetCard.period % 2;
+        if (mParity === tParity) {
+          const pLabel = mParity === 0 ? 'Par' : 'Impar';
+          return {
+            valid: false,
+            reason: `Debes alternar paridad de período: Período ${movingCard.period} y Período ${targetCard.period} son ambos ${pLabel}.`
+          };
+        }
+        return {
+          valid: true,
+          reason: `${movingCard.z}-${movingCard.symbol} (Período ${movingCard.period}) tiene menor Z (${movingCard.z} < ${targetCard.z}) y alterna paridad de período con ${targetCard.z}-${targetCard.symbol} (Período ${targetCard.period}).`
+        };
+      }
+
+      return { valid: false, reason: 'Regla desconocida.' };
+    }
+
+    // Check if `movingCard` can occupy an EMPTY Tableau column
+    function canPlaceOnEmptyTableauColumn(movingCard) {
+      if (movingCard.isWildcard) {
+        return {
+          valid: true,
+          reason: `${movingCard.symbol} es un Comodín y puede iniciar una columna vacía.`
+        };
+      }
+      const isPeriod7 = movingCard.period === 7;
+      const isClosingElement = gameState.closingZSet.has(movingCard.z);
+
+      if (isPeriod7 || isClosingElement) {
+        const motivo = isPeriod7
+          ? `pertenece al Período 7 (elementos pesados)`
+          : `es el elemento de cierre (Rey) de su fundación`;
+        return {
+          valid: true,
+          reason: `${movingCard.z}-${movingCard.symbol} puede ocupar una columna vacía porque ${motivo}.`
+        };
+      }
+
+      return {
+        valid: false,
+        reason: `Una columna vacía solo puede ocuparse con un elemento del Período 7, un elemento de cierre de fundación o un Comodín (${movingCard.z}-${movingCard.symbol} es del Período ${movingCard.period}).`
+      };
+    }
+
+    // Check if a sub-stack of cards in a tableau column (from startIdx to end) is internally valid to be dragged together
+    function isValidTableauCascade(colCards, startIdx) {
+      for (let i = startIdx; i < colCards.length; i++) {
+        if (!colCards[i].faceUp) return false;
+        if (i > startIdx) {
+          const prev = colCards[i - 1];
+          const curr = colCards[i];
+          const check = canStackOnTableauCard(curr, prev);
+          if (!check.valid) return false;
+        }
+      }
+      return true;
+    }
+
+    // Check if a single card can be placed onto a specific Foundation
+    function canPlaceOnFoundation(card, foundation) {
+      if (card.isWildcard) {
+        return {
+          valid: false,
+          reason: 'Los Comodines de Isótopo/Ion son herramientas del tablero y no se colocan en las Fundaciones.'
+        };
+      }
+      const nextIndex = foundation.cards.length;
+      if (nextIndex >= foundation.sequence.length) {
+        return { valid: false, reason: `La fundación ${foundation.title} ya está completa.` };
+      }
+      const expectedZ = foundation.sequence[nextIndex];
+      const expectedEl = ELEMENT_BY_Z[expectedZ];
+
+      if (card.z === expectedZ) {
+        return {
+          valid: true,
+          reason: `¡Excelente! ${card.z}-${card.symbol} (${card.name}) es el siguiente elemento en orden ascendente de Z para ${foundation.title}.`
+        };
+      }
+
+      return {
+        valid: false,
+        reason: `La fundación ${foundation.title} espera a ${expectedEl.z}-${expectedEl.symbol} (${expectedEl.name}) y no a ${card.z}-${card.symbol}.`
+      };
+    }
+
+    /***************************************************************************
+     * 6. STATE HISTORY (UNDO) & MOVE EXECUTION
+     ***************************************************************************/
+    function saveHistorySnapshot() {
+      const snapshot = JSON.stringify({
+        stock: gameState.stock,
+        waste: gameState.waste,
+        foundations: gameState.foundations.map(f => ({ id: f.id, cards: f.cards })),
+        tableau: gameState.tableau,
+        moves: gameState.moves
+      });
+      gameState.history.push(snapshot);
+      if (gameState.history.length > 60) gameState.history.shift();
+      document.getElementById('btnUndo').disabled = false;
+    }
+
+    function undoLastMove() {
+      if (gameState.history.length === 0) return;
+      const last = JSON.parse(gameState.history.pop());
+      gameState.stock = last.stock;
+      gameState.waste = last.waste;
+      gameState.tableau = last.tableau;
+      gameState.moves = last.moves;
+
+      last.foundations.forEach((savedF, idx) => {
+        gameState.foundations[idx].cards = savedF.cards;
+      });
+
+      document.getElementById('btnUndo').disabled = gameState.history.length === 0;
+      clearSelectionAndHints();
+      playSoundEffect('move');
+      renderAll();
+    }
+
+    // Draw from Stock to Waste
+    function drawFromStock() {
+      clearSelectionAndHints();
+      saveHistorySnapshot();
+
+      if (gameState.stock.length === 0) {
+        if (gameState.waste.length === 0) {
+          gameState.history.pop();
+          return;
+        }
+        // Recycle waste back into stock
+        gameState.stock = gameState.waste.reverse().map(c => ({ ...c, faceUp: false }));
+        gameState.waste = [];
+        gameState.moves++;
+        playSoundEffect('move');
+        renderAll();
+        return;
+      }
+
+      const count = Math.min(gameState.drawCount, gameState.stock.length);
+      for (let i = 0; i < count; i++) {
+        const card = gameState.stock.pop();
+        card.faceUp = true;
+        gameState.waste.push(card);
+      }
+      gameState.moves++;
+      playSoundEffect('move');
+      renderAll();
+    }
+
+    // Special Wildcard Pedagogical Action: Unlock trapped bottom face-down card in a tableau column
+    function useWildcardUnlock(colIdx, cardIdx) {
+      const col = gameState.tableau[colIdx];
+      const wildCard = col[cardIdx];
+      if (!wildCard || !wildCard.isWildcard) return;
+
+      // Check if there is a face-down card in this column
+      const firstFaceDownIdx = col.findIndex(c => !c.faceUp);
+      if (firstFaceDownIdx === -1) {
+        showPedagogicalBanner('ℹ️ En esta columna ya no hay cartas ocultas boca abajo para desbloquear. Puedes arrastrar el comodín a otra columna.', 'info');
+        return;
+      }
+
+      saveHistorySnapshot();
+      // Remove wildcard (consumed) and bring the deepest face-down card to the top of the column face-up!
+      col.splice(cardIdx, 1);
+      const freedCard = col.splice(firstFaceDownIdx, 1)[0];
+      freedCard.faceUp = true;
+      col.push(freedCard);
+
+      gameState.moves++;
+      playSoundEffect('foundation');
+      showPedagogicalBanner(
+        `⚛️ ¡Transmutación completada! El comodín ${wildCard.symbol} liberó a <strong>${freedCard.z}-${freedCard.symbol} (${freedCard.name})</strong> que estaba atrapado al fondo de la columna ${colIdx + 1}.`,
+        'success'
+      );
+      renderAll();
+    }
+
+    // Execute a move from `source` to `target`
+    // source: { zone: 'waste' | 'tableau', colIdx, cardIdx }
+    // target: { zone: 'foundation' | 'tableau', index }
+    function attemptMove(source, target) {
+      let movingCards = [];
+      if (source.zone === 'waste') {
+        if (gameState.waste.length === 0) return false;
+        movingCards = [gameState.waste[gameState.waste.length - 1]];
+      } else if (source.zone === 'tableau') {
+        const col = gameState.tableau[source.colIdx];
+        if (!col || source.cardIdx < 0 || source.cardIdx >= col.length) return false;
+        if (!isValidTableauCascade(col, source.cardIdx)) {
+          showPedagogicalBanner('⚠️ No puedes mover ese grupo de cartas porque no forman una escalera periódica válida.', 'warn');
+          playSoundEffect('error');
+          return false;
+        }
+        movingCards = col.slice(source.cardIdx);
+      }
+
+      if (movingCards.length === 0) return false;
+      const leadCard = movingCards[0];
+
+      // Target is a Foundation
+      if (target.zone === 'foundation') {
+        if (movingCards.length > 1) {
+          showPedagogicalBanner('⚠️ A las Fundaciones solo se puede subir una carta a la vez.', 'warn');
+          playSoundEffect('error');
+          return false;
+        }
+        const foundation = gameState.foundations[target.index];
+        const check = canPlaceOnFoundation(leadCard, foundation);
+        if (!check.valid) {
+          showPedagogicalBanner(`❌ ${check.reason}`, 'warn');
+          playSoundEffect('error');
+          return false;
+        }
+
+        // Valid foundation move!
+        saveHistorySnapshot();
+        removeCardsFromSource(source, 1);
+        foundation.cards.push(leadCard);
+        gameState.moves++;
+        clearSelectionAndHints();
+        playSoundEffect('foundation');
+        showPedagogicalBanner(`✅ ${check.reason}`, 'success');
+        renderAll();
+        checkVictoryCondition();
+        return true;
+      }
+
+      // Target is a Tableau Column
+      if (target.zone === 'tableau') {
+        if (source.zone === 'tableau' && source.colIdx === target.index) return false;
+        const destCol = gameState.tableau[target.index];
+
+        let check;
+        if (destCol.length === 0) {
+          check = canPlaceOnEmptyTableauColumn(leadCard);
+        } else {
+          const topDestCard = destCol[destCol.length - 1];
+          check = canStackOnTableauCard(leadCard, topDestCard);
+        }
+
+        if (!check.valid) {
+          showPedagogicalBanner(`❌ Movimiento no permitido: ${check.reason}`, 'warn');
+          playSoundEffect('error');
+          return false;
+        }
+
+        // Valid tableau move!
+        saveHistorySnapshot();
+        removeCardsFromSource(source, movingCards.length);
+        destCol.push(...movingCards);
+        gameState.moves++;
+        clearSelectionAndHints();
+        playSoundEffect('move');
+        showPedagogicalBanner(`🧪 ${check.reason}`, 'info');
+        renderAll();
+        return true;
+      }
+
+      return false;
+    }
+
+    function removeCardsFromSource(source, count) {
+      if (source.zone === 'waste') {
+        gameState.waste.pop();
+      } else if (source.zone === 'tableau') {
+        const col = gameState.tableau[source.colIdx];
+        col.splice(source.cardIdx, count);
+        // Flip new top card if face down
+        if (col.length > 0 && !col[col.length - 1].faceUp) {
+          col[col.length - 1].faceUp = true;
+        }
+      }
+    }
+
+    // Double-click shortcut: find matching foundation for top card and send it
+    function tryAutoSendCardToFoundation(source) {
+      let card = null;
+      if (source.zone === 'waste') {
+        if (gameState.waste.length === 0) return false;
+        card = gameState.waste[gameState.waste.length - 1];
+      } else if (source.zone === 'tableau') {
+        const col = gameState.tableau[source.colIdx];
+        if (source.cardIdx !== col.length - 1) return false; // only top card can go to foundation
+        card = col[source.cardIdx];
+      }
+      if (!card || card.isWildcard) return false;
+
+      for (let fIdx = 0; fIdx < gameState.foundations.length; fIdx++) {
+        const f = gameState.foundations[fIdx];
+        const check = canPlaceOnFoundation(card, f);
+        if (check.valid) {
+          return attemptMove(source, { zone: 'foundation', index: fIdx });
+        }
+      }
+      return false;
+    }
+
+    // Header helper button: find any available card on Waste or Tableau top that can go to a Foundation
+    function autoMoveOneToFoundation() {
+      // Check Waste top card first
+      if (gameState.waste.length > 0) {
+        if (tryAutoSendCardToFoundation({ zone: 'waste' })) return;
+      }
+      // Check all 7 Tableau column top cards
+      for (let c = 0; c < 7; c++) {
+        const col = gameState.tableau[c];
+        if (col.length > 0) {
+          if (tryAutoSendCardToFoundation({ zone: 'tableau', colIdx: c, cardIdx: col.length - 1 })) {
+            return;
+          }
+        }
+      }
+      showPedagogicalBanner('🔎 Ninguna carta libre del descarte o extremo de columna es el siguiente elemento inmediato de una Fundación.', 'info');
+    }
+
+    /***************************************************************************
+     * 7. PEDAGOGICAL ASSISTANT ("PISTA QUÍMICA")
+     ***************************************************************************/
+    function triggerPedagogicalHint() {
+      clearSelectionAndHints();
+
+      // 1. Priority 1: Can Waste top card or any Tableau top card move to a Foundation?
+      if (gameState.waste.length > 0) {
+        const wCard = gameState.waste[gameState.waste.length - 1];
+        for (let fIdx = 0; fIdx < gameState.foundations.length; fIdx++) {
+          const check = canPlaceOnFoundation(wCard, gameState.foundations[fIdx]);
+          if (check.valid) {
+            setHint({ zone: 'waste' }, { zone: 'foundation', index: fIdx },
+              `💡 <strong>Pista de Fundación:</strong> Mueve <strong>${wCard.z}-${wCard.symbol} (${wCard.name})</strong> desde el Descarte hacia la fundación <strong>${gameState.foundations[fIdx].title}</strong>. ${check.reason}`
+            );
+            return;
+          }
+        }
+      }
+
+      for (let c = 0; c < 7; c++) {
+        const col = gameState.tableau[c];
+        if (col.length === 0) continue;
+        const topCard = col[col.length - 1];
+        for (let fIdx = 0; fIdx < gameState.foundations.length; fIdx++) {
+          const check = canPlaceOnFoundation(topCard, gameState.foundations[fIdx]);
+          if (check.valid) {
+            setHint(
+              { zone: 'tableau', colIdx: c, cardIdx: col.length - 1 },
+              { zone: 'foundation', index: fIdx },
+              `💡 <strong>Pista de Fundación:</strong> Envía <strong>${topCard.z}-${topCard.symbol} (${topCard.name})</strong> de la Columna ${c + 1} a la fundación <strong>${gameState.foundations[fIdx].title}</strong>. ${check.reason}`
+            );
+            return;
+          }
+        }
+      }
+
+      // 2. Priority 2: Can a face-up cascade in Tableau move to another Tableau column to uncover a face-down card or clear a column?
+      for (let c = 0; c < 7; c++) {
+        const col = gameState.tableau[c];
+        if (col.length === 0) continue;
+        const firstFaceUpIdx = col.findIndex(card => card.faceUp);
+        if (firstFaceUpIdx === -1) continue;
+
+        if (!isValidTableauCascade(col, firstFaceUpIdx)) continue;
+        const leadCard = col[firstFaceUpIdx];
+        if (leadCard.isWildcard) continue;
+
+        for (let destColIdx = 0; destColIdx < 7; destColIdx++) {
+          if (destColIdx === c) continue;
+          const destCol = gameState.tableau[destColIdx];
+
+          if (destCol.length > 0) {
+            const destTop = destCol[destCol.length - 1];
+            const check = canStackOnTableauCard(leadCard, destTop);
+            if (check.valid) {
+              setHint(
+                { zone: 'tableau', colIdx: c, cardIdx: firstFaceUpIdx },
+                { zone: 'tableau', index: destColIdx },
+                `💡 <strong>Pista en Tablero:</strong> Mueve <strong>${leadCard.z}-${leadCard.symbol}</strong> (Columna ${c + 1}) sobre <strong>${destTop.z}-${destTop.symbol}</strong> (Columna ${destColIdx + 1}). ${check.reason}`
+              );
+              return;
+            }
+          } else if (firstFaceUpIdx > 0) {
+            // Only suggest moving to an empty column if it uncovers a face-down card!
+            const check = canPlaceOnEmptyTableauColumn(leadCard);
+            if (check.valid) {
+              setHint(
+                { zone: 'tableau', colIdx: c, cardIdx: firstFaceUpIdx },
+                { zone: 'tableau', index: destColIdx },
+                `💡 <strong>Pista Estratégica:</strong> Lleva <strong>${leadCard.z}-${leadCard.symbol}</strong> a la Columna vacía ${destColIdx + 1} para descubrir una carta oculta. ${check.reason}`
+              );
+              return;
+            }
+          }
+        }
+      }
+
+      // 3. Priority 3: Can Waste top card move to a Tableau column?
+      if (gameState.waste.length > 0) {
+        const wCard = gameState.waste[gameState.waste.length - 1];
+        for (let destColIdx = 0; destColIdx < 7; destColIdx++) {
+          const destCol = gameState.tableau[destColIdx];
+          const check = destCol.length === 0
+            ? canPlaceOnEmptyTableauColumn(wCard)
+            : canStackOnTableauCard(wCard, destCol[destCol.length - 1]);
+
+          if (check.valid) {
+            setHint(
+              { zone: 'waste' },
+              { zone: 'tableau', index: destColIdx },
+              `💡 <strong>Pista desde el Descarte:</strong> Coloca <strong>${wCard.isWildcard ? wCard.symbol : wCard.z + '-' + wCard.symbol}</strong> en la Columna ${destColIdx + 1}. ${check.reason}`
+            );
+            return;
+          }
+        }
+      }
+
+      // 4. Suggest drawing from Stock
+      if (gameState.stock.length > 0 || gameState.waste.length > 0) {
+        showPedagogicalBanner('💡 <strong>Sugerencia:</strong> Haz clic en el <strong>Mazo de Robo</strong> (arriba a la izquierda) para revelar nuevos elementos químicos.', 'info');
+        playSoundEffect('hint');
+      } else {
+        showPedagogicalBanner('🤔 No quedan movimientos directos disponibles. Puedes usar el botón Deshacer o iniciar una nueva mano.', 'warn');
+      }
+    }
+
+    function setHint(source, target, messageHtml) {
+      gameState.hintHighlight = { source, target };
+      playSoundEffect('hint');
+      showPedagogicalBanner(messageHtml, 'hint');
+      renderAll();
+    }
+
+    function showPedagogicalBanner(htmlText, type = 'info') {
+      const banner = document.getElementById('pedagogicalBanner');
+      const textEl = document.getElementById('pedagogicalText');
+      const iconEl = document.getElementById('pedagogicalIcon');
+      textEl.innerHTML = htmlText;
+      iconEl.textContent = type === 'success' ? '✅' : type === 'warn' ? '⚠️' : type === 'hint' ? '💡' : '🧪';
+      banner.classList.remove('hidden');
+    }
+
+    function hidePedagogicalBanner() {
+      document.getElementById('pedagogicalBanner').classList.add('hidden');
+    }
+
+    function clearSelectionAndHints() {
+      gameState.selectedSource = null;
+      gameState.hintHighlight = null;
+      const label = document.getElementById('selectionStatusLabel');
+      if (label) label.classList.add('hidden');
+    }
+
+    /***************************************************************************
+     * 8. VICTORY CHECK
+     ***************************************************************************/
+    function getPlacedElementsCount() {
+      return gameState.foundations.reduce((acc, f) => acc + f.cards.length, 0);
+    }
+
+    function checkVictoryCondition() {
+      const placed = getPlacedElementsCount();
+      if (placed >= gameState.activeElementsCount) {
+        if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+        playSoundEffect('win');
+        document.getElementById('vicElements').textContent = `${placed} / ${gameState.activeElementsCount}`;
+        document.getElementById('vicMoves').textContent = String(gameState.moves);
+        document.getElementById('vicTime').textContent = document.getElementById('statTimer').textContent;
+        document.getElementById('victoryModal').classList.remove('hidden');
+      }
+    }
+
+    function closeVictoryModal() {
+      document.getElementById('victoryModal').classList.add('hidden');
+    }
+
+    /***************************************************************************
+     * 9. CARD & BOARD RENDERING
+     ***************************************************************************/
+    function createCardElement(card, sourceInfo, extraStyle = '') {
+      const div = document.createElement('div');
+
+      if (!card.faceUp) {
+        div.className = 'chem-card face-down flex items-center justify-center select-none';
+        if (extraStyle) div.style.cssText = extraStyle;
+        div.innerHTML = `
+          <div class="w-9 h-9 rounded-full border border-slate-700/80 bg-slate-900/80 flex items-center justify-center text-slate-500 text-xs font-mono-code font-bold shadow-inner">
+            ⚛
+          </div>
+        `;
+        return div;
+      }
+
+      // Check if selected or hinted
+      const isSelected = gameState.selectedSource &&
+        gameState.selectedSource.zone === sourceInfo.zone &&
+        gameState.selectedSource.colIdx === sourceInfo.colIdx &&
+        gameState.selectedSource.cardIdx === sourceInfo.cardIdx;
+
+      const isHintOrigin = gameState.hintHighlight &&
+        gameState.hintHighlight.source.zone === sourceInfo.zone &&
+        gameState.hintHighlight.source.colIdx === sourceInfo.colIdx &&
+        gameState.hintHighlight.source.cardIdx === sourceInfo.cardIdx;
+
+      // Wildcard rendering
+      if (card.isWildcard) {
+        div.className = `chem-card face-up bg-gradient-to-br from-fuchsia-950 via-indigo-950 to-slate-900 border-2 border-fuchsia-400/80 p-2 flex flex-col justify-between ${isSelected ? 'selected-card' : ''} ${isHintOrigin ? 'hint-origin' : ''}`;
+        if (extraStyle) div.style.cssText = extraStyle;
+        div.draggable = true;
+
+        const showUnlockBtn = sourceInfo.zone === 'tableau' &&
+          gameState.tableau[sourceInfo.colIdx].some(c => !c.faceUp);
+
+        div.innerHTML = `
+          <div class="flex items-center justify-between border-b border-fuchsia-500/30 pb-1">
+            <span class="text-[11px] font-mono-code font-extrabold px-1.5 py-0.5 rounded bg-fuchsia-500/30 text-fuchsia-200">
+              COMODÍN
+            </span>
+            <span class="text-xs">⚡</span>
+          </div>
+          <div class="text-center my-auto py-0.5">
+            <div class="text-2xl sm:text-3xl font-extrabold text-fuchsia-200 tracking-tight">${card.symbol}</div>
+            <div class="text-[11px] font-bold text-white leading-tight mt-0.5">${card.name}</div>
+            <div class="text-[9px] text-fuchsia-300 font-mono-code mt-0.5">${card.config}</div>
+          </div>
+          <div class="flex flex-col gap-1">
+            ${showUnlockBtn ? `
+              <button onclick="event.stopPropagation(); useWildcardUnlock(${sourceInfo.colIdx}, ${sourceInfo.cardIdx});" 
+                class="w-full py-0.5 px-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[9px] uppercase tracking-tight shadow">
+                🔓 Liberar Carta Oculta
+              </button>
+            ` : `
+              <div class="text-[9px] text-center text-fuchsia-200/90 bg-fuchsia-950/80 rounded py-0.5 border border-fuchsia-500/30">
+                Puente Universal Z
+              </div>
+            `}
+          </div>
+        `;
+      } else {
+        // Standard Chemical Element Card (1 to 118)
+        const cat = CATEGORIES[card.categoryId];
+        const blk = BLOCK_COLORS[card.block];
+
+        div.className = `chem-card face-up bg-gradient-to-b ${cat.bgClass} border-2 ${cat.borderClass} p-1.5 sm:p-2 flex flex-col justify-between ${isSelected ? 'selected-card' : ''} ${isHintOrigin ? 'hint-origin' : ''}`;
+        if (extraStyle) div.style.cssText = extraStyle;
+        div.draggable = true;
+
+        div.innerHTML = `
+          <!-- Top Header Strip (Always visible in Tableau cascade!) -->
+          <div class="flex items-center justify-between gap-1 border-b border-white/10 pb-1">
+            <div class="flex items-center gap-1">
+              <span class="text-xs sm:text-sm font-mono-code font-extrabold text-white px-1.5 py-0.2 rounded bg-slate-950/80 border border-white/15">
+                ${card.z}
+              </span>
+              <span class="text-xs sm:text-sm font-extrabold text-white tracking-tight">
+                ${card.symbol}
+              </span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-[10px] font-mono-code font-bold px-1.5 py-0.2 rounded border ${blk.badge}">
+                ${card.block}
+              </span>
+              <span class="text-[9px] font-mono-code text-slate-300 bg-slate-950/60 px-1 rounded hidden sm:inline">
+                P${card.period}·G${card.group}
+              </span>
+            </div>
+          </div>
+
+          <!-- Center Body: Big Symbol, Spanish Name & Electron Configuration -->
+          <div class="flex flex-col items-center justify-center text-center my-auto py-0.5">
+            <div class="text-2xl sm:text-3xl font-extrabold tracking-tight text-white drop-shadow">
+              ${card.symbol}
+            </div>
+            <div class="text-[11px] sm:text-xs font-bold text-slate-100 leading-tight truncate max-w-full px-1">
+              ${card.name}
+            </div>
+            <div class="text-[9px] sm:text-[10px] font-mono-code text-cyan-300/95 bg-slate-950/65 px-1.5 py-0.5 rounded mt-1 border border-cyan-500/20 truncate max-w-full" title="Configuración electrónica: ${card.config}">
+              ${card.config}
+            </div>
+          </div>
+
+          <!-- Bottom Bar: Category, Period/Group & Info Inspector button -->
+          <div class="flex items-center justify-between gap-1 pt-1 border-t border-white/10">
+            <span class="text-[9px] font-semibold px-1.5 py-0.5 rounded border truncate ${cat.badgeClass}" title="${cat.name}">
+              ${cat.shortName}
+            </span>
+            <button onclick="event.stopPropagation(); inspectElementInModal(${card.z});" 
+              class="w-5 h-5 rounded-full bg-slate-950/70 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[10px] font-bold flex items-center justify-center border border-white/15 transition shrink-0"
+              title="Ver ficha técnica de ${card.name}">
+              ℹ
+            </button>
+          </div>
+        `;
+      }
+
+      // Attach Mouse & Drag Events
+      div.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onCardClick(sourceInfo);
+      });
+
+      div.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        tryAutoSendCardToFoundation(sourceInfo);
+      });
+
+      div.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        if (sourceInfo.zone === 'tableau' && !isValidTableauCascade(gameState.tableau[sourceInfo.colIdx], sourceInfo.cardIdx)) {
+          e.preventDefault();
+          showPedagogicalBanner('⚠️ Esas cartas no forman una escalera periódica válida para arrastrarse juntas.', 'warn');
+          return;
+        }
+        e.dataTransfer.setData('text/plain', JSON.stringify(sourceInfo));
+        div.classList.add('opacity-60');
+      });
+
+      div.addEventListener('dragend', () => {
+        div.classList.remove('opacity-60');
+      });
+
+      return div;
+    }
+
+    // Handle click-to-select and click-to-move interaction
+    function onCardClick(sourceInfo) {
+      if (sourceInfo.zone === 'foundation') return;
+
+      // If no card is currently selected, select this one
+      if (!gameState.selectedSource) {
+        if (sourceInfo.zone === 'tableau') {
+          const col = gameState.tableau[sourceInfo.colIdx];
+          if (!isValidTableauCascade(col, sourceInfo.cardIdx)) {
+            showPedagogicalBanner('⚠️ Solo puedes mover múltiples cartas si están ordenadas con Z descendente y alternancia válida.', 'warn');
+            playSoundEffect('error');
+            return;
+          }
+        }
+        gameState.selectedSource = sourceInfo;
+        const label = document.getElementById('selectionStatusLabel');
+        if (label) label.classList.remove('hidden');
+        renderAll();
+        return;
+      }
+
+      // If clicking the exact same card again, deselect it
+      if (
+        gameState.selectedSource.zone === sourceInfo.zone &&
+        gameState.selectedSource.colIdx === sourceInfo.colIdx &&
+        gameState.selectedSource.cardIdx === sourceInfo.cardIdx
+      ) {
+        clearSelectionAndHints();
+        renderAll();
+        return;
+      }
+
+      // If a card is already selected and the user clicked a card in a Tableau column, try moving onto that Tableau column!
+      if (sourceInfo.zone === 'tableau') {
+        const moved = attemptMove(gameState.selectedSource, { zone: 'tableau', index: sourceInfo.colIdx });
+        if (!moved) {
+          // If move failed, switch selection to the newly clicked card if valid
+          if (isValidTableauCascade(gameState.tableau[sourceInfo.colIdx], sourceInfo.cardIdx)) {
+            gameState.selectedSource = sourceInfo;
+            renderAll();
+          }
+        }
+        return;
+      }
+
+      // Otherwise switch selection
+      gameState.selectedSource = sourceInfo;
+      renderAll();
+    }
+
+    function renderAll() {
+      // Update top bar stats
+      const placedCount = getPlacedElementsCount();
+      document.getElementById('statProgress').textContent = `${placedCount} / ${gameState.activeElementsCount}`;
+      document.getElementById('statMoves').textContent = String(gameState.moves);
+      document.getElementById('stockCounterBadge').textContent = `Mazo: ${gameState.stock.length}`;
+
+      renderStockAndWaste();
+      renderFoundations();
+      renderTableau();
+    }
+
+    function renderStockAndWaste() {
+      const stockSlot = document.getElementById('stockSlot');
+      stockSlot.innerHTML = '';
+
+      if (gameState.stock.length > 0) {
+        stockSlot.className = 'chem-card face-down flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400 group';
+        stockSlot.innerHTML = `
+          <div class="w-11 h-11 rounded-full bg-slate-900/90 border border-cyan-500/40 flex flex-col items-center justify-center shadow-lg group-hover:scale-105 transition">
+            <span class="text-xs font-mono-code font-extrabold text-cyan-300">${gameState.stock.length}</span>
+            <span class="text-[8px] uppercase text-slate-400 font-bold">Robar</span>
+          </div>
+        `;
+      } else {
+        stockSlot.className = 'card-slot flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400 text-slate-400 hover:text-cyan-300';
+        stockSlot.innerHTML = `
+          <span class="text-2xl mb-1">↻</span>
+          <span class="text-[10px] font-bold uppercase text-center px-2">Reciclar Descarte</span>
+        `;
+      }
+
+      // Render up to last 3 cards in Waste
+      const wasteContainer = document.getElementById('wasteContainer');
+      wasteContainer.innerHTML = '';
+      if (gameState.waste.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'card-slot flex items-center justify-center text-[11px] text-slate-600 font-semibold';
+        empty.textContent = 'Vacío';
+        wasteContainer.appendChild(empty);
+      } else {
+        const visibleSlice = gameState.waste.slice(-3);
+        visibleSlice.forEach((card, idx) => {
+          const isTop = idx === visibleSlice.length - 1;
+          const offsetPx = idx * 16;
+          const cardEl = createCardElement(
+            card,
+            { zone: 'waste', colIdx: 0, cardIdx: gameState.waste.length - visibleSlice.length + idx },
+            `position: absolute; left: ${offsetPx}px; top: 0; z-index: ${10 + idx}; ${!isTop ? 'pointer-events: none; filter: brightness(0.75);' : ''}`
+          );
+          wasteContainer.appendChild(cardEl);
+        });
+      }
+    }
+
+    function renderFoundations() {
+      const container = document.getElementById('foundationsGrid');
+      container.innerHTML = '';
+
+      const subtitle = document.getElementById('modalitySubtitle');
+      if (gameState.modality === 'blocks') {
+        subtitle.textContent = '— Modalidad 1: 4 Bloques de Orbitales (s, p, d, f)';
+      } else if (gameState.modality === 'categories') {
+        subtitle.textContent = '— Modalidad 2: 10 Categorías Químicas';
+      } else {
+        subtitle.textContent = `— Modalidad 3: Grupos de la Tabla Periódica (${gameState.foundations.length} pilas)`;
+      }
+
+      const isCompact = gameState.foundations.length > 4;
+
+      gameState.foundations.forEach((f, fIdx) => {
+        const nextIdx = f.cards.length;
+        const isComplete = nextIdx >= f.sequence.length;
+        const nextExpectedZ = !isComplete ? f.sequence[nextIdx] : null;
+        const nextExpectedEl = nextExpectedZ ? ELEMENT_BY_Z[nextExpectedZ] : null;
+        const topCard = f.cards.length > 0 ? f.cards[f.cards.length - 1] : null;
+
+        const isHintTarget = gameState.hintHighlight &&
+          gameState.hintHighlight.target.zone === 'foundation' &&
+          gameState.hintHighlight.target.index === fIdx;
+
+        const slot = document.createElement('div');
+        slot.className = `${isCompact ? 'foundation-slot-compact w-[108px] sm:w-[116px]' : 'card-slot'} relative rounded-xl border-2 border-dashed border-slate-700/90 bg-slate-950/70 p-2 flex flex-col justify-between cursor-pointer hover:border-emerald-400/70 transition ${isHintTarget ? 'hint-target' : ''}`;
+        slot.style.borderColor = topCard ? f.color : '';
+
+        slot.innerHTML = `
+          <!-- Foundation Header -->
+          <div class="flex items-center justify-between gap-1 border-b border-slate-800 pb-1">
+            <span class="text-[10px] font-extrabold truncate px-1.5 py-0.5 rounded border ${f.badgeClass}" title="${f.title}">
+              ${isCompact ? f.shortTitle : f.title}
+            </span>
+            <span class="text-[10px] font-mono-code font-bold text-slate-400">
+              ${f.cards.length}/${f.sequence.length}
+            </span>
+          </div>
+
+          <!-- Center State: Current Top Element or Empty Icon -->
+          <div class="my-auto text-center py-1">
+            ${topCard ? `
+              <div class="text-[10px] font-mono-code text-emerald-300 font-bold">Actual: Z=${topCard.z}</div>
+              <div class="text-xl sm:text-2xl font-extrabold text-white leading-tight">${topCard.symbol}</div>
+              <div class="text-[10px] font-semibold text-slate-300 truncate">${topCard.name}</div>
+            ` : `
+              <div class="text-[10px] text-slate-500 font-medium">${f.subtitle}</div>
+              <div class="text-xs font-bold text-slate-400 mt-0.5">Inicia en:</div>
+              <div class="text-sm font-mono-code font-extrabold text-cyan-300">
+                ${nextExpectedEl ? `${nextExpectedEl.z}-${nextExpectedEl.symbol}` : '—'}
+              </div>
+            `}
+          </div>
+
+          <!-- Footer: Next Expected Element Guide -->
+          <div class="border-t border-slate-800/90 pt-1 flex items-center justify-between text-[10px]">
+            ${isComplete ? `
+              <span class="w-full text-center font-extrabold text-emerald-400">✓ ¡COMPLETA!</span>
+            ` : `
+              <span class="text-slate-400">Sigue:</span>
+              <span class="font-mono-code font-extrabold text-amber-300 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-500/30">
+                ${nextExpectedEl.z}-${nextExpectedEl.symbol}
+              </span>
+            `}
+          </div>
+        `;
+
+        // Click on foundation: either move selected card there, or open sequence inspector modal
+        slot.addEventListener('click', () => {
+          if (gameState.selectedSource) {
+            attemptMove(gameState.selectedSource, { zone: 'foundation', index: fIdx });
+          } else {
+            openFoundationDetailModal(fIdx);
+          }
+        });
+
+        // Drag & Drop Target events
+        slot.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          slot.classList.add('drag-over');
+        });
+        slot.addEventListener('dragleave', () => {
+          slot.classList.remove('drag-over');
+        });
+        slot.addEventListener('drop', (e) => {
+          e.preventDefault();
+          slot.classList.remove('drag-over');
+          try {
+            const sourceInfo = JSON.parse(e.dataTransfer.getData('text/plain'));
+            attemptMove(sourceInfo, { zone: 'foundation', index: fIdx });
+          } catch (err) {}
+        });
+
+        container.appendChild(slot);
+      });
+    }
+
+    function renderTableau() {
+      const grid = document.getElementById('tableauGrid');
+      grid.innerHTML = '';
+
+      for (let colIdx = 0; colIdx < 7; colIdx++) {
+        const colCards = gameState.tableau[colIdx];
+        const colWrapper = document.createElement('div');
+        colWrapper.className = 'relative flex flex-col items-center w-full';
+
+        const isHintTarget = gameState.hintHighlight &&
+          gameState.hintHighlight.target.zone === 'tableau' &&
+          gameState.hintHighlight.target.index === colIdx;
+
+        // Column Header pill
+        const colHeader = document.createElement('div');
+        colHeader.className = 'text-[10px] font-mono-code font-bold text-slate-400 mb-1.5 px-2 py-0.5 rounded-full bg-slate-900/90 border border-slate-800';
+        colHeader.textContent = `Col ${colIdx + 1} (${colCards.length})`;
+        colWrapper.appendChild(colHeader);
+
+        // Card Stack Container
+        const stackArea = document.createElement('div');
+        stackArea.className = 'relative w-[var(--card-w)]';
+
+        if (colCards.length === 0) {
+          const emptySlot = document.createElement('div');
+          emptySlot.className = `card-slot flex flex-col items-center justify-center p-2 text-center cursor-pointer hover:border-sky-400/70 ${isHintTarget ? 'hint-target' : ''}`;
+          emptySlot.innerHTML = `
+            <span class="text-lg text-slate-600 mb-1">⬇</span>
+            <span class="text-[10px] font-bold text-slate-400 leading-tight">Columna Vacía</span>
+            <span class="text-[9px] text-slate-500 mt-1 leading-tight">Admite Período 7, Cierre de Fundación o Comodín</span>
+          `;
+          emptySlot.addEventListener('click', () => {
+            if (gameState.selectedSource) {
+              attemptMove(gameState.selectedSource, { zone: 'tableau', index: colIdx });
+            }
+          });
+          stackArea.appendChild(emptySlot);
+        } else {
+          let currentTopPx = 0;
+          colCards.forEach((card, cardIdx) => {
+            const isLast = cardIdx === colCards.length - 1;
+            const cardEl = createCardElement(
+              card,
+              { zone: 'tableau', colIdx, cardIdx },
+              `position: absolute; top: ${currentTopPx}px; left: 0; z-index: ${10 + cardIdx};`
+            );
+            if (isLast && isHintTarget) {
+              cardEl.classList.add('hint-target');
+            }
+            stackArea.appendChild(cardEl);
+            // Face-down cards have tight 18px offset; face-up cards leave 34px so Z, Symbol, Block & Period remain clearly visible
+            currentTopPx += card.faceUp ? 36 : 16;
+          });
+          stackArea.style.height = `${currentTopPx + 150}px`;
+        }
+
+        // Allow dropping onto the column stack area
+        stackArea.addEventListener('dragover', (e) => {
+          e.preventDefault();
+        });
+        stackArea.addEventListener('drop', (e) => {
+          e.preventDefault();
+          try {
+            const sourceInfo = JSON.parse(e.dataTransfer.getData('text/plain'));
+            attemptMove(sourceInfo, { zone: 'tableau', index: colIdx });
+          } catch (err) {}
+        });
+
+        colWrapper.appendChild(stackArea);
+        grid.appendChild(colWrapper);
+      }
+    }
+
+    /***************************************************************************
+     * 10. INTERACTIVE PERIODIC TABLE MODAL & ELEMENT TECHNICAL SHEET
+     ***************************************************************************/
+    function getElementGameStatus(z) {
+      // Check foundations
+      for (const f of gameState.foundations) {
+        if (f.cards.some(c => c.z === z)) {
+          return { status: 'foundation', label: `Colocado en Fundación (${f.title})`, badge: 'bg-emerald-500 text-slate-950 font-extrabold ring-2 ring-emerald-300' };
+        }
+      }
+      // Check waste
+      if (gameState.waste.some(c => c.z === z)) {
+        return { status: 'visible', label: 'Visible en Pila de Descarte', badge: 'bg-sky-500 text-slate-950 font-bold ring-2 ring-sky-300' };
+      }
+      // Check tableau face-up
+      for (let c = 0; c < 7; c++) {
+        if (gameState.tableau[c].some(card => card.z === z && card.faceUp)) {
+          return { status: 'visible', label: `Visible en Tablero (Columna ${c + 1})`, badge: 'bg-sky-500 text-slate-950 font-bold ring-2 ring-sky-300' };
+        }
+      }
+      return { status: 'hidden', label: 'Oculto en el Mazo o boca abajo en Tablero', badge: 'bg-slate-800 text-slate-300 border border-slate-600' };
+    }
+
+    // Calculate grid coordinates (row 1..10, col 1..18) for standard 18-column Periodic Table
+    function getPeriodicGridCoords(el) {
+      if (el.z >= 57 && el.z <= 71) {
+        // Lanthanide row (row 9, cols 3..17)
+        return { row: 9, col: 3 + (el.z - 57) };
+      }
+      if (el.z >= 89 && el.z <= 103) {
+        // Actinide row (row 10, cols 3..17)
+        return { row: 10, col: 3 + (el.z - 89) };
+      }
+      return { row: el.period, col: el.group };
+    }
+
+    function openPeriodicTableModal() {
+      renderPeriodicTableMap();
+      renderElementInspector(gameState.inspectedElementZ || 1);
+      document.getElementById('periodicTableModal').classList.remove('hidden');
+    }
+
+    function closePeriodicTableModal() {
+      document.getElementById('periodicTableModal').classList.add('hidden');
+    }
+
+    function inspectElementInModal(z) {
+      gameState.inspectedElementZ = z;
+      openPeriodicTableModal();
+    }
+
+    function renderPeriodicTableMap() {
+      const grid = document.getElementById('ptInteractiveGrid');
+      grid.innerHTML = '';
+
+      // Create lookup map by "row-col"
+      const cellMap = {};
+      ELEMENTS_DB.forEach(el => {
+        const coords = getPeriodicGridCoords(el);
+        cellMap[`${coords.row}-${coords.col}`] = el;
+      });
+
+      for (let r = 1; r <= 10; r++) {
+        // Spacer row 8 between Period 7 and Lanthanides/Actinides
+        if (r === 8) {
+          const spacer = document.createElement('div');
+          spacer.style.gridColumn = '1 / span 18';
+          spacer.className = 'h-3 flex items-center text-[10px] text-slate-500 font-mono-code pl-1';
+          grid.appendChild(spacer);
+          continue;
+        }
+
+        for (let c = 1; c <= 18; c++) {
+          const el = cellMap[`${r}-${c}`];
+          const cell = document.createElement('div');
+
+          if (!el) {
+            // Check if it's the Lanthanide/Actinide placeholder in Period 6/7 Group 3
+            if ((r === 6 || r === 7) && c === 3) {
+              cell.className = 'h-12 rounded bg-slate-900/70 border border-dashed border-slate-700 flex flex-col items-center justify-center text-[9px] font-mono-code text-slate-400';
+              cell.innerHTML = r === 6 ? '<span>57-71</span><span>4f</span>' : '<span>89-103</span><span>5f</span>';
+            } else if ((r === 9 || r === 10) && c === 2) {
+              cell.className = 'h-12 flex items-center justify-end pr-1 text-[10px] font-bold text-pink-400';
+              cell.textContent = r === 9 ? '4f →' : '5f →';
+            }
+            grid.appendChild(cell);
+            continue;
+          }
+
+          const gameSt = getElementGameStatus(el.z);
+          const cat = CATEGORIES[el.categoryId];
+          const isInspected = gameState.inspectedElementZ === el.z;
+
+          let stateClasses = 'bg-slate-900/90 border-slate-700 text-slate-300 opacity-75 hover:opacity-100';
+          if (gameSt.status === 'foundation') {
+            stateClasses = 'bg-emerald-950 border-emerald-400 text-emerald-200 ring-1 ring-emerald-400/70 shadow-md opacity-100';
+          } else if (gameSt.status === 'visible') {
+            stateClasses = 'bg-sky-950 border-sky-400 text-sky-200 ring-1 ring-sky-400/60 opacity-100';
+          }
+
+          cell.className = `h-12 rounded-md border p-1 flex flex-col justify-between cursor-pointer transition transform hover:scale-105 ${stateClasses} ${isInspected ? 'outline outline-2 outline-amber-400 z-10 scale-105' : ''}`;
+          cell.style.borderLeftColor = cat.color;
+          cell.style.borderLeftWidth = '3px';
+
+          cell.innerHTML = `
+            <div class="flex items-center justify-between text-[9px] font-mono-code leading-none">
+              <span>${el.z}</span>
+              <span>${el.block}</span>
+            </div>
+            <div class="text-center font-extrabold text-xs leading-none">${el.symbol}</div>
+            <div class="text-[8px] truncate text-center opacity-80 leading-none">${el.name}</div>
+          `;
+
+          cell.addEventListener('click', () => {
+            gameState.inspectedElementZ = el.z;
+            renderPeriodicTableMap();
+            renderElementInspector(el.z);
+          });
+
+          grid.appendChild(cell);
+        }
+      }
+    }
+
+    function renderElementInspector(z) {
+      const el = ELEMENT_BY_Z[z];
+      if (!el) return;
+      const cat = CATEGORIES[el.categoryId];
+      const blk = BLOCK_COLORS[el.block];
+      const gameSt = getElementGameStatus(el.z);
+
+      const panel = document.getElementById('elementInspectorPanel');
+      panel.innerHTML = `
+        <div class="flex flex-col gap-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-cyan-400">Ficha Técnica del Elemento</span>
+            <span class="text-xs font-mono-code font-bold px-2 py-0.5 rounded border ${blk.badge}">${blk.label}</span>
+          </div>
+
+          <!-- Big Preview Card -->
+          <div class="rounded-xl bg-gradient-to-br ${cat.bgClass} border-2 ${cat.borderClass} p-4 flex items-center justify-between shadow-lg">
+            <div>
+              <div class="text-xs font-mono-code text-slate-300">Número Atómico Z = ${el.z}</div>
+              <div class="text-3xl font-extrabold text-white mt-0.5">${el.name}</div>
+              <div class="text-xs font-mono-code text-cyan-300 mt-1">${el.config}</div>
+            </div>
+            <div class="w-16 h-16 rounded-xl bg-slate-950/75 border border-white/15 flex flex-col items-center justify-center">
+              <span class="text-[10px] font-mono-code text-slate-400">${el.z}</span>
+              <span class="text-2xl font-extrabold text-white">${el.symbol}</span>
+            </div>
+          </div>
+
+          <!-- Properties Table -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 text-xs space-y-2">
+            <div class="flex justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-slate-400">Categoría Química:</span>
+              <span class="font-bold text-white">${cat.name}</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-slate-400">Carácter Químico:</span>
+              <span class="font-bold ${el.isMetal ? 'text-amber-300' : 'text-emerald-300'}">
+                ${el.isMetal ? 'Carácter Metálico' : 'No Metal / Metaloide'}
+              </span>
+            </div>
+            <div class="flex justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-slate-400">Grupo / Columna:</span>
+              <span class="font-mono-code font-bold text-white">Grupo ${el.group}</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-800 pb-1.5">
+              <span class="text-slate-400">Período / Nivel:</span>
+              <span class="font-mono-code font-bold text-white">
+                Período ${el.period} (${el.period % 2 === 0 ? 'Par' : 'Impar'})
+              </span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Configuración:</span>
+              <span class="font-mono-code font-bold text-cyan-300">${el.config}</span>
+            </div>
+          </div>
+
+          <!-- Current Game Status -->
+          <div class="rounded-xl p-3 bg-slate-900 border border-slate-800">
+            <div class="text-[11px] text-slate-400 mb-1">Estado en la partida actual:</div>
+            <div class="text-xs px-2.5 py-1.5 rounded-lg inline-block ${gameSt.badge}">
+              ${gameSt.label}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    /***************************************************************************
+     * 11. FOUNDATION SEQUENCE INSPECTOR MODAL
+     ***************************************************************************/
+    function openFoundationDetailModal(fIdx) {
+      const f = gameState.foundations[fIdx];
+      if (!f) return;
+
+      document.getElementById('fModalTitle').textContent = `${f.title} — Secuencia Ascendente (${f.cards.length}/${f.sequence.length})`;
+      document.getElementById('fModalSubtitle').textContent = `${f.subtitle}. Debes apilar estos elementos en el siguiente orden estricto de Z:`;
+
+      const list = document.getElementById('fModalSequenceList');
+      list.innerHTML = '';
+
+      const placedSet = new Set(f.cards.map(c => c.z));
+      const nextZ = f.cards.length < f.sequence.length ? f.sequence[f.cards.length] : null;
+
+      f.sequence.forEach((z, idx) => {
+        const el = ELEMENT_BY_Z[z];
+        const isPlaced = placedSet.has(z);
+        const isNext = z === nextZ;
+
+        const item = document.createElement('div');
+        item.className = `p-2 rounded-xl border text-center flex flex-col items-center justify-center cursor-pointer transition ${
+          isPlaced
+            ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200'
+            : isNext
+            ? 'bg-amber-950/90 border-amber-400 text-amber-200 ring-2 ring-amber-400/50'
+            : 'bg-slate-950 border-slate-800 text-slate-400'
+        }`;
+
+        item.innerHTML = `
+          <div class="text-[10px] font-mono-code font-bold">#${idx + 1} · Z=${el.z}</div>
+          <div class="text-lg font-extrabold text-white">${el.symbol}</div>
+          <div class="text-[10px] font-semibold truncate max-w-full">${el.name}</div>
+          <div class="text-[9px] font-mono-code mt-0.5 ${isPlaced ? 'text-emerald-400' : isNext ? 'text-amber-300 font-bold' : 'text-slate-500'}">
+            ${isPlaced ? '✓ Colocado' : isNext ? '▶ Siguiente' : `P${el.period}·${el.block}`}
+          </div>
+        `;
+
+        item.addEventListener('click', () => {
+          closeFoundationDetailModal();
+          inspectElementInModal(el.z);
+        });
+
+        list.appendChild(item);
+      });
+
+      document.getElementById('foundationDetailModal').classList.remove('hidden');
+    }
+
+    function closeFoundationDetailModal() {
+      document.getElementById('foundationDetailModal').classList.add('hidden');
+    }
+
+    // Boot the game on window load
+    window.addEventListener('DOMContentLoaded', () => {
+      startNewGame();
+    });
+  </script>
+</body>
+</html>
